@@ -1,0 +1,22 @@
+﻿{
+    "processedVersion":  null,
+    "detectedVersion":  "V84.00",
+    "status":  "DETECTED",
+    "pageHash":  "97E723E93BB5DA40787E3F939F2FC77EA3CE3304574A68CF5C3D1B33EA0F4F89",
+    "detectedAt":  "2026-10-16T05:31:28.7018963Z",
+    "review":  {
+                   "requestedAt":  null,
+                   "nextReminderAt":  null,
+                   "reminderCount":  0
+               },
+    "artifacts":  {
+                      "sourceFile":  "C:\\Users\\ddraganov\\OneDrive - DXC Production\\Documents\\training\\health CCAM\\ccam-load-gt\\input\\CCAM_V84_VF.xls",
+                      "sourceUrl":  "https://www.ameli.fr/fileadmin/user_upload/documents/CCAM_V84_VF.xls",
+                      "sourceHash":  "1C267C77BA66A93ABD5BB250329CC14FBF10A2AB9380839B33862D97C154560B",
+                      "candidateFile":  null,
+                      "candidateHash":  null,
+                      "finalFile":  null,
+                      "finalHash":  null
+                  },
+    "lastError":  null
+}

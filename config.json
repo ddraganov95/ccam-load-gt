@@ -1,0 +1,64 @@
+{
+  "source": {
+    "ccamPageUrl": "https://www.ameli.fr/accueil-de-la-ccam/telechargement/index.php"
+  },
+
+  "schedule": {
+    "dailyCheckTime": "TODO"
+  },
+
+  "review": {
+    "reminderIntervalDays": 5,
+    "maxReminders": 3
+  },
+
+  "connector": {
+    "type": "outlook",
+    "reviewer": "dragan.draganov@dxc.com",
+    "technicalContact": "dragan.draganov@dxc.com"
+  },
+
+  "graphTalk": {
+    "inputDirectory": "TODO"
+  },
+
+  "gtMonitor": {
+    "batchName": "TODO",
+    "requestMethod": "TODO",
+    "requestTarget": "TODO",
+
+    "logs": {
+      "executionLogDirectory": "TODO",
+      "executionLogPattern": "TODO",
+      "successMarker": "TODO",
+      "errorLogDirectory": "TODO",
+      "errorLogPattern": "TODO"
+    }
+  },
+
+  "workflow": {
+    "stateFile": "state/workflow.json",
+
+    "directories": {
+      "input": "input",
+      "work": "work",
+      "review": "review",
+      "approved": "approved",
+      "logs": "logs"
+    }
+  },
+
+  "ai": {
+    "sourceInterpreter": {
+      "model": "TODO"
+    },
+
+    "transformationAgent": {
+      "model": "TODO"
+    },
+
+    "errorAnalysisAgent": {
+      "model": "TODO"
+    }
+  }
+}
