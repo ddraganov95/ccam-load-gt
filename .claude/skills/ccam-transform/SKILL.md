@@ -1,6 +1,6 @@
 ---
 name: ccam-transform
-description: Transform a CNAM CCAM Excel workbook into the exact semicolon-delimited GraphTalk loading format by reconstructing hierarchical Code, Activity, and Phase records, applying Code-only deferred substitution, and validating the result automatically.
+description: Transform a CNAM CCAM Excel workbook into the exact semicolon-delimited GraphTalk loading format by reconstructing hierarchical Code, Activity, and Phase records and validating the result automatically.
 ---
 
 # CCAM to GraphTalk Normalizer
@@ -60,65 +60,51 @@ Do not deduplicate using Code alone. `(Code, Activity, Phase)` must be unique in
 
 ## Stateful source parsing
 
-Process the workbook sequentially. Reconstruct logical Code blocks and preserve source-row values unless a rule explicitly changes one field.
+Process the workbook sequentially and reconstruct logical Code blocks before generating output records.
 
 ### Logical Code blocks
 
 A logical Code block begins when a non-empty `CodeValue` is encountered and continues until the next non-empty `CodeValue`.
 
-The Code does not need to be repeated on every Activity or Phase row. Blank Code cells inside the block belong to the Code that opened the block.
+The Code does not need to be repeated on every Activity or Phase row. Blank Code cells inside the block belong to the `CodeValue` that opened the block.
 
-For each block, collect its main label, Activity rows, Phase rows, child descriptions, tariffs, Regroupement values, and other structural values. Generate one record for each valid `(Code, Activity, Phase)` combination.
+For each logical Code block, collect all applicable:
 
-Example: if `FERP001` opens a block containing Activity 1 with Phases 1, 2, and 3, all three child rows belong to `FERP001` even though the Code is written only once.
+- main-label content;
+- Activity rows;
+- Phase rows;
+- activity-specific and phase-specific descriptions;
+- tariffs;
+- Regroupement values;
+- other structural values needed by the output.
 
-### Deferred Code substitution when the CodeValue row has no Regroupement
+Generate one record for each valid `(Code, Activity, Phase)` combination after reconstructing the complete block.
 
-When a row contains `CodeValue` and its main label but has no Regroupement on that same CodeValue row:
+Use the `CodeValue` that opened the block as the output Code for every record in that block. Do not inherit or substitute a Code from the preceding logical block merely because Regroupement is absent from the physical `CodeValue` row.
 
-1. Store the new CodeValue and label as a pending source act.
-2. Scan forward only until either:
-   - another non-empty CodeValue is encountered; or
-   - a qualifying row containing Regroupement together with Activity and Phase is encountered.
+Regroupement may appear on a child Activity/Phase row rather than on the `CodeValue` row. Associate each child row's Regroupement, Activity, Phase, tariffs, and descriptions with the Code block that contains that row.
 
-If another CodeValue is encountered first:
-
-- discard the pending act;
-- emit no output record for it.
-
-If a qualifying Regroupement + Activity + Phase row is encountered first:
-
-- generate the pending act's logical Activity/Phase record;
-- substitute only the output Code with the previous valid output Code;
-- preserve the pending act's own label;
-- preserve Activity and Phase from the current qualifying row;
-- preserve both tariffs from the current qualifying row exactly;
-- preserve Group_code from the current qualifying row;
-- preserve every other current-record value, including Tail.
-
-Do not inherit or overwrite label, Activity, Phase, tariffs, Group_code, date, or Tail. Only the output Code is substituted.
-
-Known V80 example:
-
-- source act `ZZMP012` has no Regroupement on its CodeValue row;
-- its qualifying Phase rows contain Activity, Phase, and Group_code `ATM`;
-- output Code is substituted with previous valid Code `ZZMP018`;
-- the phase labels, tariffs, Group_code, and other values remain those of the `ZZMP012` source rows.
+Example: if `FERP001` opens a block containing Activity 1 with Phases 1, 2, and 3, generate:
 
 ```text
-ZZMP018;1;1;<ZZMP012 source label> Phase 1 : <phase description>;05/11/2025;;;ATM;
-ZZMP018;1;2;<ZZMP012 source label> Phase 2 : <phase description>;05/11/2025;668;668;ATM;
+FERP001;1;1;...
+FERP001;1;2;...
+FERP001;1;3;...
 ```
 
-This is Code-only substitution. It is not full-record inheritance.
+All three records use `FERP001` even though the Code is written only once.
 
 ## Field mappings
 
 ### 1. Code
 
-Source: Excel column `Code` / `CodeValue`, resolved through logical-block parsing and the deferred Code-substitution rule.
+Source: Excel column `Code` / `CodeValue`.
 
-Normally, use the current block's source Code. When a CodeValue row has no Regroupement and a qualifying Regroupement + Activity + Phase row is found before the next CodeValue, substitute only the output Code with the previous valid output Code. Preserve all other fields from the current source act and qualifying row.
+A non-empty `CodeValue` starts a logical Code block. Use that `CodeValue` as the output Code for every valid Activity/Phase record belonging to the block.
+
+Blank Code cells inside the block inherit the `CodeValue` that opened the block.
+
+Do not inherit or substitute the Code from the preceding logical Code block.
 
 ### 2. Actvty
 
@@ -175,7 +161,7 @@ Do not add a dash before `Activité N :`.
 
 #### Anesthesia ownership across multiple activities
 
-Determine anesthesia ownership first from source-row sequence inside the same Code and Phase.
+Determine anesthesia ownership from source-row sequence inside the same Code and Phase.
 
 If the sequence is:
 
@@ -195,28 +181,19 @@ Activity 2
 anesthésie
 ```
 
-and the activities share the same Phase, use semantic judgment to classify anesthesia as either GLOBAL or ACTIVITY-SPECIFIC.
+and the activities share the same Phase, anesthesia is GLOBAL across all preceding activities in that Phase.
 
-- If the label meaning clearly limits anesthesia to one or more activities, classify it as ACTIVITY-SPECIFIC.
-- If the meaning is inconclusive, default to GLOBAL across the preceding activities in the same Phase.
-- Never propagate anesthesia across a Phase boundary.
-- Always record this ambiguous-case decision in the human-review report.
-
-Output label by decision:
+Generate one Activity 4 anesthesia record with the plain global label:
 
 ```text
-GLOBAL:
 <main label> - anesthésie
-
-ACTIVITY-SPECIFIC:
-<main label> Activité N : <activity description> - anesthésie
 ```
 
-A GLOBAL anesthesia label must not contain `Activité N :`. An ACTIVITY-SPECIFIC label must identify the relevant Activity and preserve its description.
+Do not include `Activité N :` or an activity-specific description in a GLOBAL anesthesia label.
 
-For each reviewed decision include Code, Phase, activities considered, source sequence, relevant labels, decision, activities receiving anesthesia, concise reason, and affected output record.
+Never propagate anesthesia across a Phase boundary.
 
-Do not fail solely because a reviewed anesthesia decision exists.
+This sequence is deterministic and must not be added to the human-review report.
 
 #### Phase-specific record
 
@@ -351,7 +328,9 @@ If the tariff is blank or marked `Non pris en charge`, output an empty field. Do
 
 Source: Excel column `Regroupement`.
 
-Copy Group_code from the current qualifying Activity/Phase row. Under deferred Code substitution, Group_code remains the current row's Regroupement and must not be inherited from the previous output record.
+Use the Regroupement associated with the current logical Activity/Phase record. Regroupement may be located on a child Activity/Phase row rather than the row containing `CodeValue`.
+
+Do not inherit Group_code from the preceding logical Code block.
 
 ### 9. Tail
 
@@ -486,10 +465,10 @@ Do not blindly reproduce defects from an older output, including:
 - malformed field counts;
 - broken physical records caused by embedded line breaks;
 - incorrect activity inheritance;
-- Code or label association that violates Code qualification by Regroupement;
+- Code, Activity, Phase, or Group_code association that violates logical Code-block ownership;
 - missing Tail values that contradict the validated Tail rules.
 
-When the old output differs from the workbook, first determine whether the difference results from a valid hierarchical or deferred Code-substitution rule. Do not classify a Code as wrong until the stateful source parsing has been applied.
+When the old output differs from the workbook, first determine whether the difference results from a valid logical Code-block, Activity, Phase, or label-association rule. Do not classify a Code as wrong until the stateful source parsing has been applied.
 
 ## Expected-output comparison normalization
 
@@ -542,24 +521,18 @@ Validate all of the following:
 - No embedded CR or LF remains inside a record.
 - One applicability date is used consistently.
 - Every `(Code, Activity, Phase)` combination is unique.
-- Multiple activities repeat the resolved Code correctly.
-- Multiple phases repeat the resolved Code and Activity correctly.
-- Every logical Code block is reconstructed from its opening non-empty `CodeValue` through the row before the next non-empty `CodeValue`.
-- Blank Code cells inside a logical block inherit the Code that opened the block.
-- For a CodeValue row without Regroupement, look ahead only until the next CodeValue or a qualifying Regroupement + Activity + Phase row.
-- If the next CodeValue appears first, the pending act is skipped.
-- If the qualifying row appears first, only output Code is substituted with the previous valid output Code.
-- Under Code substitution, label, Activity, Phase, tariffs, Group_code, date, and Tail remain from the current source act/current qualifying row.
-- The V80 regression case outputs the `ZZMP012` phase records under Code `ZZMP018`, while preserving Phase 1 empty tariffs, Phase 2 tariffs `668/668`, and Group_code `ATM`.
-- Regroupement qualification is evaluated across the complete logical Code block, not only on the `CodeValue` row.
-- The V80 regression case outputs `ZZMP012` label/phase information under Code `ZZMP018` and Group_code `ATM`; `ZZMP012` does not appear in output.
-- A pending act is never carried across a new `CodeValue` boundary.
-- A `CodeValue` row without Regroupement is not emitted unless a qualifying subsequent row supplies Regroupement and Activity/Phase.
+- Every non-empty `CodeValue` starts a new logical Code block.
+- Every generated record uses the `CodeValue` that opened its logical block.
+- Blank Code cells inside a block resolve to that block's `CodeValue`.
+- No record inherits or substitutes a Code from the preceding logical block.
+- Activity, Phase, tariffs, Regroupement, labels, and Tail remain associated with their source logical block and applicable child row.
+- Multiple activities repeat Code correctly.
+- Multiple phases repeat Code and Activity correctly.
 - No headings, notes, exclusions, indications, or billing text became records.
 - No label text leaked from an adjacent act.
 - Multiline labels were normalized to one physical line.
 - Blank and `Non pris en charge` tariffs became empty fields.
-- Tariffs use comma decimal separators without unnecessary trailing zeroes.
+- Tariffs use comma decimal separators without unnecessary added trailing zeroes.
 - Tariffs preserve every decimal digit represented by Excel and are never capped at seven decimals.
 - Empty-Tail records end with `;`.
 - Populated-Tail records end with the Tail number and no trailing `;`.
@@ -568,10 +541,10 @@ Validate all of the following:
 - Tail is not copied to anesthesia.
 - Secondary and incidental quantities do not become Tail.
 - Child labels do not leak or stack across records.
-- GLOBAL anesthesia labels use `<main label> - anesthésie` and contain no Activity number.
-- ACTIVITY-SPECIFIC anesthesia labels use `<main label> Activité N : <description> - anesthésie`.
-- Every ambiguous multi-activity anesthesia decision is present in the human-review report.
+- Multi-activity anesthesia in the same Phase is GLOBAL and uses `<main label> - anesthésie` with no Activity number or activity-specific description.
+- Multi-activity anesthesia decisions are deterministic and are not added to the human-review report.
 - Phase labels contain no dash before `Phase N :`.
+- Activity labels contain no dash before `Activité N :`.
 - Activity 5 CEC labels are constructed correctly when present.
 - Labels contain no delimiter semicolon after serialization.
 - No label was truncated during sanitization.
@@ -580,7 +553,7 @@ Correct deterministic failures and rerun validation before returning the artifac
 
 ## Blocking failure definition
 
-FAIL is allowed only when a genuine source contradiction remains after applying the full hierarchy, logical-block and Regroupement-qualification rules, semantic family analysis, and automated validation.
+FAIL is allowed only when a genuine source contradiction remains after applying the full hierarchy, logical Code-block reconstruction, Activity/Phase association, label construction, tariff handling, Tail rules, and semantic family analysis, and automated validation.
 
 A blocking failure must identify:
 
@@ -602,10 +575,10 @@ Return:
 - phased-record count;
 - populated-Tail count;
 - empty-tariff record count;
-- human-review report containing every ambiguous anesthesia decision and ambiguous multiline-label decision, if any;
+- human-review report containing every ambiguous multiline-label decision, if any;
 - if `FAIL`, only blocking Codes/families with exact reasons.
 
-Do not provide a general manual checklist. The explicit anesthesia and multiline-label review entries are mandatory nonblocking exceptions.
+Do not provide a general manual checklist. Ambiguous multiline-label review entries are mandatory nonblocking exceptions.
 
 ## Human-in-the-loop boundary
 

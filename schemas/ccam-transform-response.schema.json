@@ -1,0 +1,67 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "outputPath",
+    "totalRecords",
+    "uniqueCodes",
+    "multiActivityCodes",
+    "phasedRecords",
+    "populatedTails",
+    "emptyTariffRecords",
+    "blockingErrors"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["PASS", "FAIL"]
+    },
+    "outputPath": {
+      "type": "string"
+    },
+    "totalRecords": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "uniqueCodes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "multiActivityCodes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "phasedRecords": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "populatedTails": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "emptyTariffRecords": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "blockingErrors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "codeOrFamily",
+          "reason"
+        ],
+        "properties": {
+          "codeOrFamily": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
