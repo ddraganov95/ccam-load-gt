@@ -2,72 +2,210 @@ param(
     [Alias("v")]
     [switch]$Validate
 )
+
 $ErrorActionPreference = "Stop"
 
-# ============================================================
-# Paths
-# ============================================================
-
+$Config = $null
+$State = $null
 $ProjectRoot = $PSScriptRoot
+$ConfigPath = $null
+$StatePath = $null
 
-if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
-    throw "Unable to determine the project root from PSScriptRoot."
-}
+function Send-CcamFailureEmail {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Recipient,
 
-Set-Location -LiteralPath $ProjectRoot
+        [Parameter(Mandatory)]
+        [string]$Reason,
 
-$ConfigPath = Join-Path $ProjectRoot "config.json"
-$StatePath  = Join-Path $ProjectRoot "state\workflow.json"
-$TransformSchemaPath = Join-Path `
-    $ProjectRoot `
-    "schemas\ccam-transform-response.schema.json"
+        [string]$WorkflowStatus = "UNKNOWN",
 
-Write-Host "CCAM Automation"
-Write-Host "Project root: $ProjectRoot"
-Write-Host "Working directory: $((Get-Location).Path)"
+        [string]$DetectedVersion = "UNKNOWN"
+    )
 
-
-# ============================================================
-# Validate required files
-# ============================================================
-
-if (-not (Test-Path $ConfigPath)) {
-    throw "Configuration file not found: $ConfigPath"
-}
-
-if (-not (Test-Path $StatePath)) {
-    throw "Workflow state file not found: $StatePath"
-}
-$TransformSkillPath = Join-Path `
-    $ProjectRoot `
-    ".claude\skills\ccam-transform\SKILL.md"
-
-if (-not (Test-Path -LiteralPath $TransformSkillPath)) {
-    throw "CCAM transformation skill not found: $TransformSkillPath"
-}
-
-Write-Host "Transformation skill found: $TransformSkillPath"
-
-# ============================================================
-# Optional environment validation
-# Run with -Validate or -v
-# ============================================================
-
-if ($Validate) {
-
-    Write-Host ""
-    Write-Host "Validation mode enabled."
-    Write-Host "Checking Claude CLI and project skill visibility..."
-
-    $ClaudeCommand = Get-Command claude -ErrorAction SilentlyContinue
-
-    if ($null -eq $ClaudeCommand) {
-        throw "Claude CLI was not found in PATH."
+    if ([string]::IsNullOrWhiteSpace($Recipient)) {
+        Write-Warning "Failure email not sent because no technical contact is configured."
+        return
     }
 
-    Write-Host "Claude CLI found: $($ClaudeCommand.Source)"
+    $Outlook = $null
+    $Mail = $null
 
-    $SkillVisibilityPrompt = @"
+    try {
+        $Outlook = New-Object -ComObject Outlook.Application
+        $Mail = $Outlook.CreateItem(0)
+
+        $Mail.To = $Recipient
+        $Mail.Subject = "CCAM automation failed on $env:COMPUTERNAME"
+
+        $Mail.Body = @"
+The CCAM automation requires attention.
+
+Reason:
+$Reason
+
+Workflow status:
+$WorkflowStatus
+
+Detected CCAM version:
+$DetectedVersion
+
+Computer:
+$env:COMPUTERNAME
+
+User:
+$env:USERNAME
+
+Time:
+$((Get-Date).ToString("yyyy-MM-dd HH:mm:ss"))
+
+Script:
+$PSCommandPath
+"@
+
+        $Mail.Send()
+
+        Write-Host ""
+        Write-Host "Failure notification sent to $Recipient"
+    }
+    catch {
+        Write-Warning "The failure notification could not be sent."
+        Write-Warning $_.Exception.Message
+    }
+    finally {
+        if ($null -ne $Mail) {
+            [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($Mail)
+        }
+
+        if ($null -ne $Outlook) {
+            [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($Outlook)
+        }
+
+        [GC]::Collect()
+        [GC]::WaitForPendingFinalizers()
+    }
+}
+
+try {
+
+    # ============================================================
+    # Paths
+    # ============================================================
+
+    if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
+        throw "Unable to determine the project root from PSScriptRoot."
+    }
+
+    Set-Location -LiteralPath $ProjectRoot
+
+    $ConfigPath = Join-Path $ProjectRoot "config.json"
+    $StatePath = Join-Path $ProjectRoot "state\workflow.json"
+
+    $TransformSchemaPath = Join-Path `
+        $ProjectRoot `
+        "schemas\ccam-transform-response.schema.json"
+
+    $TransformSkillPath = Join-Path `
+        $ProjectRoot `
+        ".claude\skills\ccam-transform\SKILL.md"
+
+    Write-Host "CCAM Automation"
+    Write-Host "Project root: $ProjectRoot"
+    Write-Host "Working directory: $((Get-Location).Path)"
+    # ============================================================
+    # Validate required files
+    # ============================================================
+
+    if (-not (Test-Path -LiteralPath $ConfigPath)) {
+        throw "Configuration file not found: $ConfigPath"
+    }
+
+    if (-not (Test-Path -LiteralPath $StatePath)) {
+        throw "Workflow state file not found: $StatePath"
+    }
+
+    if (-not (Test-Path -LiteralPath $TransformSkillPath)) {
+        throw "CCAM transformation skill not found: $TransformSkillPath"
+    }
+
+    if (-not (Test-Path -LiteralPath $TransformSchemaPath)) {
+        throw "Transformation response schema not found: $TransformSchemaPath"
+    }
+
+    Write-Host "Transformation skill found: $TransformSkillPath"
+
+    # ============================================================
+    # Load configuration and workflow state
+    # ============================================================
+
+    try {
+        $Config = Get-Content -LiteralPath $ConfigPath -Raw |
+            ConvertFrom-Json
+    }
+    catch {
+        throw "config.json contains invalid JSON: $($_.Exception.Message)"
+    }
+
+    try {
+        $State = Get-Content -LiteralPath $StatePath -Raw |
+            ConvertFrom-Json
+    }
+    catch {
+        throw "Workflow state file contains invalid JSON: $($_.Exception.Message)"
+    }
+
+    if ($null -eq $Config.connector) {
+        throw "The connector section is missing from config.json."
+    }
+
+    if ([string]::IsNullOrWhiteSpace(
+        [string]$Config.connector.technicalContact
+    )) {
+        throw "connector.technicalContact is missing from config.json."
+    }
+
+    if ([string]::IsNullOrWhiteSpace(
+        [string]$Config.connector.reviewer
+    )) {
+        throw "connector.reviewer is missing from config.json."
+    }
+
+    if ([string]::IsNullOrWhiteSpace(
+        [string]$Config.source.ccamPageUrl
+    )) {
+        throw "source.ccamPageUrl is missing from config.json."
+    }
+
+    Write-Host ""
+    Write-Host "Configuration loaded successfully."
+    Write-Host "CCAM URL: $($Config.source.ccamPageUrl)"
+
+    Write-Host ""
+    Write-Host "Workflow state loaded successfully."
+    Write-Host "Status: $($State.status)"
+    Write-Host "Processed version: $($State.processedVersion)"
+    Write-Host "Detected version: $($State.detectedVersion)"
+
+    # ============================================================
+    # Optional environment validation
+    # Run with -Validate or -v
+    # ============================================================
+
+    if ($Validate) {
+        Write-Host ""
+        Write-Host "Validation mode enabled."
+        Write-Host "Checking Claude CLI and project skill visibility..."
+
+        $ClaudeCommand = Get-Command claude -ErrorAction SilentlyContinue
+
+        if ($null -eq $ClaudeCommand) {
+            throw "Claude CLI was not found in PATH."
+        }
+
+        Write-Host "Claude CLI found: $($ClaudeCommand.Source)"
+
+        $SkillVisibilityPrompt = @"
 Inspect the current project directory.
 
 Confirm whether this file exists and is readable:
@@ -84,70 +222,73 @@ If the file cannot be read, return exactly:
 SKILL_NOT_FOUND
 "@
 
-    $SkillVisibilityResult = $SkillVisibilityPrompt |
-        & claude -p --output-format text
+        $SkillVisibilityResult = $SkillVisibilityPrompt |
+            & claude -p --output-format text
 
-    if ($LASTEXITCODE -ne 0) {
-        throw "Claude visibility test failed with exit code $LASTEXITCODE."
-    }
+        if ($LASTEXITCODE -ne 0) {
+            throw "Claude visibility test failed with exit code $LASTEXITCODE."
+        }
 
-    $SkillVisibilityResult = $SkillVisibilityResult.Trim()
+        $SkillVisibilityResult = $SkillVisibilityResult.Trim()
 
-    Write-Host "Claude skill visibility result: $SkillVisibilityResult"
+        Write-Host "Claude skill visibility result: $SkillVisibilityResult"
 
-    if ($SkillVisibilityResult -ne "SKILL_FOUND") {
-        throw "Claude could not confirm access to the project transformation skill."
-    }
-    Write-Host "Checking transformation response schema..."
+        if ($SkillVisibilityResult -ne "SKILL_FOUND") {
+            throw "Claude could not confirm access to the project transformation skill."
+        }
 
-    if (-not (Test-Path -LiteralPath $TransformSchemaPath)) {
-    throw "Transformation response schema not found: $TransformSchemaPath"
-}
+        Write-Host "Checking transformation response schema..."
 
-try {
-    $null = Get-Content $TransformSchemaPath -Raw |
-        ConvertFrom-Json
-}
-catch {
-    throw "Transformation response schema contains invalid JSON: $TransformSchemaPath"
-}
+        try {
+            $null = Get-Content -LiteralPath $TransformSchemaPath -Raw |
+                ConvertFrom-Json
+        }
+        catch {
+            throw "Transformation response schema contains invalid JSON: $($_.Exception.Message)"
+        }
 
-Write-Host "Transformation response schema is valid."
-    Write-Host ""
-    Write-Host "Validation completed successfully."
+        Write-Host "Transformation response schema is valid."
+        Write-Host ""
+        Write-Host "Validation completed successfully."
 
-    exit 0
-}
-function Invoke-CcamTransformation {
-    param(
-        [Parameter(Mandatory)]
-        [string]$SourceExcelPath,
+        exit 0
+    }  
+        function Invoke-CcamTransformation {
+        param(
+            [Parameter(Mandatory)]
+            [string]$SourceExcelPath,
 
-        [Parameter(Mandatory)]
-        [string]$Version
-    )
+            [Parameter(Mandatory)]
+            [string]$Version
+        )
 
-    if (-not (Test-Path -LiteralPath $SourceExcelPath)) {
-        throw "Source Excel file not found: $SourceExcelPath"
-    }
+        if (-not (Test-Path -LiteralPath $SourceExcelPath)) {
+            throw "Source Excel file not found: $SourceExcelPath"
+        }
 
-    $OutputDirectory = Join-Path $ProjectRoot "output"
+        $OutputDirectory = Join-Path $ProjectRoot "output"
 
-    if (-not (Test-Path -LiteralPath $OutputDirectory)) {
-        New-Item -ItemType Directory -Path $OutputDirectory | Out-Null
-    }
+        if (-not (Test-Path -LiteralPath $OutputDirectory)) {
+            New-Item -ItemType Directory -Path $OutputDirectory |
+                Out-Null
+        }
 
-    $SafeVersion = $Version -replace '[^A-Za-z0-9._-]', '_'
+        $SafeVersion = $Version -replace '[^A-Za-z0-9._-]', '_'
 
-    $OutputPath = Join-Path `
-        $OutputDirectory `
-        "CCAM_${SafeVersion}_normalise.csv"
+        $OutputPath = Join-Path `
+            $OutputDirectory `
+            "CCAM_${SafeVersion}_normalise.csv"
 
-    $Schema = Get-Content $TransformSchemaPath -Raw |
-        ConvertFrom-Json |
-        ConvertTo-Json -Depth 20 -Compress
+        try {
+            $Schema = Get-Content -LiteralPath $TransformSchemaPath -Raw |
+                ConvertFrom-Json |
+                ConvertTo-Json -Depth 20 -Compress
+        }
+        catch {
+            throw "Unable to load transformation schema: $($_.Exception.Message)"
+        }
 
-    $Prompt = @"
+        $Prompt = @"
 Use the ccam-transform skill available in this project.
 
 Source Excel:
@@ -164,56 +305,45 @@ Correct deterministic failures automatically.
 Return structured validation information only.
 "@
 
-    Write-Host ""
-    Write-Host "Calling Claude for CCAM transformation..."
-    Write-Host "Source: $SourceExcelPath"
-    Write-Host "Output: $OutputPath"
+        Write-Host ""
+        Write-Host "Calling Claude for CCAM transformation..."
+        Write-Host "Source: $SourceExcelPath"
+        Write-Host "Output: $OutputPath"
 
-    $ClaudeRawResult = $Prompt |
-        & claude `
-            -p `
-            --output-format json `
-            --json-schema $Schema
+        $ClaudeRawResult = $Prompt |
+            & claude `
+                -p `
+                --output-format json `
+                --json-schema $Schema
 
-    if ($LASTEXITCODE -ne 0) {
-        throw "Claude transformation failed with exit code $LASTEXITCODE."
-    }
+        if ($LASTEXITCODE -ne 0) {
+            throw "Claude transformation failed with exit code $LASTEXITCODE."
+        }
 
-    $ClaudeResponse = $ClaudeRawResult | ConvertFrom-Json
+        try {
+            $ClaudeResponse = $ClaudeRawResult |
+                ConvertFrom-Json
+        }
+        catch {
+            throw "Claude returned invalid JSON: $($_.Exception.Message)"
+        }
 
-    if ($ClaudeResponse.is_error -eq $true) {
-        throw "Claude returned a transformation error."
-    }
+        if ($ClaudeResponse.is_error -eq $true) {
+            throw "Claude returned a transformation error."
+        }
 
-    if ($null -eq $ClaudeResponse.structured_output) {
-        throw "Claude did not return structured transformation output."
-    }
+        if ($null -eq $ClaudeResponse.structured_output) {
+            throw "Claude did not return structured transformation output."
+        }
 
-    $Result = $ClaudeResponse.structured_output
+        $Result = $ClaudeResponse.structured_output
 
-    if (-not (Test-Path -LiteralPath $OutputPath)) {
-        throw "Claude did not create the required output: $OutputPath"
-    }
+        if (-not (Test-Path -LiteralPath $OutputPath)) {
+            throw "Claude did not create the required output: $OutputPath"
+        }
 
-    return $Result
-}
-# ============================================================
-# Load configuration and workflow state
-# ============================================================
-
-$Config = Get-Content $ConfigPath -Raw | ConvertFrom-Json
-$State  = Get-Content $StatePath -Raw | ConvertFrom-Json
-
-Write-Host ""
-Write-Host "Configuration loaded successfully."
-Write-Host "CCAM URL: $($Config.source.ccamPageUrl)"
-
-Write-Host ""
-Write-Host "Workflow state loaded successfully."
-Write-Host "Status: $($State.status)"
-Write-Host "Processed version: $($State.processedVersion)"
-Write-Host "Detected version: $($State.detectedVersion)"
-
+        return $Result
+    }  
 # ============================================================
 # Pending approval reminder
 # ============================================================
@@ -243,6 +373,8 @@ if (-not (Test-Path $InputDirectory)) {
     New-Item -ItemType Directory -Path $InputDirectory | Out-Null
 }
 
+$CurlErrorPath = Join-Path $InputDirectory "ccam-curl-error.txt"
+
 & curl.exe `
     -f `
     -sS `
@@ -252,11 +384,27 @@ if (-not (Test-Path $InputDirectory)) {
     --retry 2 `
     --retry-delay 2 `
     $Config.source.ccamPageUrl `
-    -o $PagePath
+    -o $PagePath `
+    2> $CurlErrorPath
 
-if ($LASTEXITCODE -ne 0) {
-    throw "Failed to download CCAM page."
+$CurlExitCode = $LASTEXITCODE
+
+if ($CurlExitCode -ne 0) {
+
+    $CurlError = ""
+
+    if (Test-Path -LiteralPath $CurlErrorPath) {
+        $CurlError = (Get-Content -LiteralPath $CurlErrorPath -Raw).Trim()
+    }
+
+    if ([string]::IsNullOrWhiteSpace($CurlError)) {
+        $CurlError = "curl returned no additional error information."
+    }
+
+    throw "Failed to download CCAM page. curl exit code: $CurlExitCode. Details: $CurlError"
 }
+
+Remove-Item -LiteralPath $CurlErrorPath -ErrorAction SilentlyContinue
 
 if (-not (Test-Path $PagePath)) {
     throw "CCAM page was not created."
@@ -500,6 +648,68 @@ exit 0
 Write-Host ""
 Write-Host "Current processed version: $($State.processedVersion)"
 Write-Host "Detected website version: $DetectedVersion"
+}
+catch {
+    $FailureReason = $_.Exception.Message
+    $FailurePosition = $_.InvocationInfo.PositionMessage
+    $FailureDetails = $_ | Out-String
+
+    Write-Host ""
+    Write-Warning "CCAM automation failed: $FailureReason"
+
+    $CurrentWorkflowStatus = "UNKNOWN"
+    $CurrentDetectedVersion = "UNKNOWN"
+    $TechnicalContact = $null
+
+    if ($null -ne $State) {
+        if (-not [string]::IsNullOrWhiteSpace(
+            [string]$State.status
+        )) {
+            $CurrentWorkflowStatus = [string]$State.status
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace(
+            [string]$State.detectedVersion
+        )) {
+            $CurrentDetectedVersion =
+                [string]$State.detectedVersion
+        }
+    }
+
+    if (
+        $null -ne $Config -and
+        $null -ne $Config.connector -and
+        -not [string]::IsNullOrWhiteSpace(
+            [string]$Config.connector.technicalContact
+        )
+    ) {
+        $TechnicalContact =
+            [string]$Config.connector.technicalContact
+    }
+
+    $EmailReason = @"
+$FailureReason
+
+PowerShell location:
+$FailurePosition
+
+Full error:
+$FailureDetails
+"@
+
+    if (-not [string]::IsNullOrWhiteSpace($TechnicalContact)) {
+        Send-CcamFailureEmail `
+            -Recipient $TechnicalContact `
+            -Reason $EmailReason `
+            -WorkflowStatus $CurrentWorkflowStatus `
+            -DetectedVersion $CurrentDetectedVersion
+    }
+    else {
+        Write-Warning "Failure email could not be sent because connector.technicalContact was not loaded."
+    }
+
+    exit 1
+}
 
 # We have not implemented existing-version / supersession
 # handling yet. That will be the next workflow step.
