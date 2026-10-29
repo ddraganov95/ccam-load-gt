@@ -491,7 +491,8 @@ This normalization applies only to reference comparison. The generated artifact 
 
 Produce one logical record per physical line.
 
-- Encoding: Windows-1252 / CP1252.
+- Encoding for the .csv: Windows-1252 / CP1252.
+- Encoding for text in report after finishing: UTF-8
 - Byte order mark: none.
 - Line ending: Windows CRLF (`\r\n`).
 - Field separator: semicolon (`;`).
@@ -563,22 +564,39 @@ A blocking failure must identify:
 
 Do not classify ordinary transformation decisions as blocking failures.
 
-## Required final response
+### Required final response
 
-Return:
+Return structured output matching the JSON schema supplied by the caller.
 
-- generated output file;
-- status `PASS` or `FAIL`;
-- total output record count;
-- unique Code count;
-- multi-activity Code count;
-- phased-record count;
-- populated-Tail count;
-- empty-tariff record count;
-- human-review report containing every ambiguous multiline-label decision, if any;
-- if `FAIL`, only blocking Codes/families with exact reasons.
+Populate all required fields from the final generated and validated artifact:
 
-Do not provide a general manual checklist. Ambiguous multiline-label review entries are mandatory nonblocking exceptions.
+- `status`: `PASS` or `FAIL`
+- `outputPath`
+- `totalRecords`
+- `uniqueCodes`
+- `multiActivityCodes`
+- `phasedRecords`
+- `populatedNmbrTooth`
+- `emptyTariffRecords`
+- `validationChecks`
+- `humanReviewItems`
+- `deterministicDecisions`
+- `nmbrToothDecisions`
+- `notes`
+- `blockingErrors`
+
+Reporting rules:
+
+- `validationChecks` contains the results of the mandatory validation loop defined by this skill.
+- `humanReviewItems` contains only genuinely ambiguous decisions requiring human review.
+- `deterministicDecisions` contains noteworthy cases resolved automatically by the rules.
+- `nmbrToothDecisions` contains a concise summary of material Nmbr_tooth family rules actually applied.
+- `notes` contains useful nonblocking observations.
+- `blockingErrors` contains only genuine blocking contradictions. It must be empty when `status` is `PASS`.
+- Use an empty array when a reporting category has no entries.
+- Do not generate HTML.
+- Do not modify workflow state.
+- Do not send notifications.
 
 ## Human-in-the-loop boundary
 

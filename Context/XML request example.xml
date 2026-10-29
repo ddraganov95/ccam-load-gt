@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+               xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <soap:Body>
+    <GraphTalkRunTrx xmlns="http://www.csc.com/graphtalk/aia/"
+                     xmlns:gtx="graphtalk.aia.extension">
+      <Environment>
+        <EnvDateOverload>"29-10-2026"</EnvDateOverload>
+      </Environment>
+      <EnvironmentVariables/>
+      <RequestVariables/>
+      <TrxPackage>rfrnc</TrxPackage>
+      <TrxTheme>trx_upgrade</TrxTheme>
+      <TrxName>load_rfrnc_param_vals</TrxName>
+      <TrxType>batch</TrxType>
+      <TrxTrace>no_tracing</TrxTrace>
+      <TrxMode>save</TrxMode>
+      <TrxParams>[file_name="D:\Tmp\CCAM_ONE_RECORD_TEST.csv",type="ccam_ro"]</TrxParams>
+      <TrxDirectAccessClasses>[]</TrxDirectAccessClasses>
+    </GraphTalkRunTrx>
+  </soap:Body>
+</soap:Envelope>

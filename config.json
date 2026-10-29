@@ -1,4 +1,8 @@
 {
+  "test": {
+  "version": "V84.00",
+  "excelFile": "input/CCAM_V84_VF.xls"
+  },
   "source": {
     "ccamPageUrl": "https://www.ameli.fr/accueil-de-la-ccam/telechargement/index.php"
   },

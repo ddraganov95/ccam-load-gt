@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CCAM V84.00 Review</title>
+<style>
+:root{--brand:#5f249f;--brand-dark:#4a1c7c;--ink:#1d1d1f;--muted:#555b66;--line:#e3e5ea;--bg:#f4f5f7;--card:#fff;--flag-bg:#fff4e5;--flag:#8a4b00;--ok:#1e6b3a}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Segoe UI",Arial,sans-serif}.topbar{background:#fff;border-bottom:4px solid var(--brand)}.topbar-inner{max-width:1040px;margin:auto;padding:18px 24px;display:flex;align-items:center;gap:20px}.topbar img{height:36px;width:auto}.divider{width:1px;height:32px;background:var(--line)}.app{font-size:15px;font-weight:600;color:var(--muted)}.wrap{max-width:1040px;margin:auto;padding:28px 24px 48px}h1{font-size:24px;margin:0 0 4px}.sub{color:var(--muted);margin:0 0 24px}.versions{display:grid;grid-template-columns:1fr auto 1fr;background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:20px}.ver{padding:18px 24px}.lbl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}.num{font-size:26px;font-weight:600;margin:2px 0}.meta{font-size:12px;color:var(--muted)}.current{background:#f7f2fc}.current .num{color:var(--brand)}.arrow{display:flex;align-items:center;padding:0 8px;color:var(--muted);font-size:22px;border-left:1px solid var(--line);border-right:1px solid var(--line)}.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}.tile{background:#fff;border:1px solid var(--line);border-radius:8px;padding:14px 16px}.tile .v{font-size:24px;font-weight:600}.tile .l{font-size:12px;color:var(--muted)}.tile.flag{border-color:#f3c27a;background:var(--flag-bg)}.tile.flag .v{color:var(--flag)}.card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:20px 24px;margin-bottom:20px}.card h2{font-size:16px;margin:0 0 4px;display:flex;align-items:center;gap:10px}.desc{color:var(--muted);font-size:13px;margin:0 0 14px}.count{font-size:12px;font-weight:600;padding:1px 9px;border-radius:10px;background:var(--flag-bg);color:var(--flag)}table{width:100%;border-collapse:collapse}th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--line);background:#fafbfc}td{padding:8px 10px;border-bottom:1px solid #f0f1f4;vertical-align:top}.code{font-family:Consolas,"Courier New",monospace;font-size:13px;white-space:nowrap}.before{color:#9b1c1c}.after{color:var(--ok);font-weight:600}.empty td{color:var(--ok);text-align:center;padding:14px}details{margin-top:4px}summary{cursor:pointer;font-weight:600;color:var(--brand);padding:6px 0}.approve{background:#fff;border:1px solid var(--line);border-top:4px solid var(--brand);border-radius:8px;padding:22px 24px;display:flex;align-items:center;justify-content:space-between;gap:24px}.approve p{margin:0;color:var(--muted);font-size:13px;max-width:620px}.approve strong{color:var(--ink)}.btn{background:var(--brand);color:#fff;border:0;border-radius:6px;padding:13px 34px;font:600 15px "Segoe UI",Arial,sans-serif;cursor:pointer;white-space:nowrap;box-shadow:0 2px 6px rgba(95,36,159,.25)}.btn:hover{background:var(--brand-dark)}.foot{text-align:center;color:#9aa0aa;font-size:11px;margin-top:28px}@media(max-width:720px){.versions{grid-template-columns:1fr}.arrow{display:none}.tiles{grid-template-columns:repeat(2,1fr)}.approve{flex-direction:column;align-items:stretch}.wrap,.topbar-inner{padding-left:16px;padding-right:16px}}
+</style>
+</head>
+<body>
+<header class="topbar"><div class="topbar-inner"><img src="logo.jpg" alt="DXC Technology"><div class="divider"></div><div class="app">CCAM Load Automation · GraphTalk</div></div></header>
+<main class="wrap">
+<h1>CCAM release review</h1>
+<p class="sub">Generated 2026-10-28 14:23:43 · Run 20261028-122343</p>
+
+<section class="versions">
+  <div class="ver"><div class="lbl">Previous version (loaded)</div><div class="num">N/A</div><div class="meta">Applicable N/A</div></div>
+  <div class="arrow">&rarr;</div>
+  <div class="ver current"><div class="lbl">Current version (candidate)</div><div class="num">V84.00</div><div class="meta">Applicable N/A · CCAM_V84.00_normalise.csv</div></div>
+</section>
+
+<section class="tiles">
+  <div class="tile"><div class="v">0</div><div class="l">Codes added</div></div>
+  <div class="tile"><div class="v">0</div><div class="l">Codes removed</div></div>
+  <div class="tile"><div class="v">0</div><div class="l">Codes changed</div></div>
+  <div class="tile flag"><div class="v">5</div><div class="l">Review required</div></div>
+</section>
+
+<section class="card">
+  <h2>Human review required <span class="count">5</span></h2>
+  <p class="desc">Items requiring human confirmation before the candidate CCAM version can be approved.</p>
+  <table>
+    <thead><tr><th>Code</th><th>Review reason</th><th>Before</th><th>After</th><th>Decision / comment</th></tr></thead>
+    <tbody><tr>
+  <td class="code">MJMA006</td>
+  <td>Ambiguous label</td>
+  <td class="before">Phase 1 : reconstruction de la gaine fibreuse digitale avec pose de proth&#232;se provisoire, par abord direct | Avec ou sans : r&#233;fection de la partie cruciforme de la gaine fibreuse digitale [poulie de r&#233;flexion]</td>
+  <td class="after">Excluded second line; label kept as &#39;Phase 1 : reconstruction de la gaine fibreuse digitale avec pose de proth&#232;se provisoire, par abord direct&#39;.</td>
+  <td>Activity-child cell has a second line &#39;Avec ou sans : r&#233;fection de la partie cruciforme...&#39; which reads as a variant qualifier rather than part of the act name.</td>
+</tr>
+<tr>
+  <td class="code">MJMA014</td>
+  <td>Ambiguous label</td>
+  <td class="before">Phase 1 : reconstruction de la gaine fibreuse digitale avec pose de proth&#232;se provisoire, par abord direct | Avec ou sans : r&#233;fection de la partie cruciforme de la gaine fibreuse digitale [poulie de r&#233;flexion]</td>
+  <td class="after">Excluded second line; label kept as first line only.</td>
+  <td>Same pattern as MJMA006: trailing &#39;Avec ou sans :&#39; alternative line in a phase cell.</td>
+</tr>
+<tr>
+  <td class="code">HMGH001</td>
+  <td>Ambiguous label</td>
+  <td class="before">Activit&#233; 2 : ablation de calcul de la voie biliaire principale, par œso-gastro-duod&#233;noscopie | Avec ou sans : sphinct&#233;rotomie biliaire endoscopique</td>
+  <td class="after">Excluded second line; label kept as first line only.</td>
+  <td>Activity child cell has an &#39;Avec ou sans : sphinct&#233;rotomie biliaire endoscopique&#39; alternative line after the act name.</td>
+</tr>
+<tr>
+  <td class="code">HBLD318</td>
+  <td>Ambiguous label</td>
+  <td class="before">Pose d&#39;une couronne dentaire dentoport&#233;e en alliage pr&#233;cieux | Avec ou sans recouvrement c&#233;ramique</td>
+  <td class="after">Retained: &#39;Pose d&#39;une couronne dentaire dentoport&#233;e en alliage pr&#233;cieux Avec ou sans recouvrement c&#233;ramique&#39;.</td>
+  <td>Second line &#39;Avec ou sans recouvrement c&#233;ramique&#39; directly completes the crown act name; retained per the skill&#39;s example. Retention is hard-coded for this code in generate.ps1.</td>
+</tr>
+<tr>
+  <td class="code">HHFC040</td>
+  <td>Ambiguous label</td>
+  <td class="before">Colectomie gauche sans lib&#233;ration de l&#39;angle colique gauche, sans | r&#233;tablissement de la continuit&#233;, par cœlioscopie</td>
+  <td class="after">Retained: &#39;Colectomie gauche sans lib&#233;ration de l&#39;angle colique gauche, sans r&#233;tablissement de la continuit&#233;, par cœlioscopie&#39;.</td>
+  <td>Second line &#39;sans r&#233;tablissement de la continuit&#233;, par cœlioscopie&#39; is a continuation of the act name split across lines; retained. Hard-coded in generate.ps1.</td>
+</tr></tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>All changes</h2>
+  <p class="desc">Complete list for reference.</p>
+  <details><summary>Codes added (0)</summary><table><thead><tr><th>Code</th><th>Label</th><th>CNAM note</th></tr></thead><tbody><tr class="empty"><td colspan="3">Previous-version comparison not available yet.</td></tr></tbody></table></details>
+  <details><summary>Codes removed (0)</summary><table><thead><tr><th>Code</th><th>Label</th><th>CNAM note</th></tr></thead><tbody><tr class="empty"><td colspan="3">Previous-version comparison not available yet.</td></tr></tbody></table></details>
+  <details><summary>Codes changed (0)</summary><table><thead><tr><th>Code</th><th>Field</th><th>Before</th><th>After</th><th>CNAM note</th></tr></thead><tbody><tr class="empty"><td colspan="5">Previous-version comparison not available yet.</td></tr></tbody></table></details>
+</section>
+
+<section class="approve">
+  <div><p><strong>Approve CCAM V84.00 for loading.</strong> The file is moved to the GraphTalk input folder and the CCAM load batch is started. Nothing is loaded until you approve.</p><div id="approveStatus" role="status" aria-live="polite"></div></div>
+  <button type="button" id="approveBtn" class="btn" data-run-id="20261028-122343" data-version="V84.00" data-file="CCAM_V84.00_normalise.csv" data-file-sha256="8416070F1530A354BFB46225ADE0D8FAD706BC458E3A1BF067BE1556475F8AA5">Approve &amp; load</button>
+</section>
+
+<p class="foot">CCAM Load Automation · Internal use · 2026-10-28 14:23:43</p>
+</main>
+</body>
+</html>
+

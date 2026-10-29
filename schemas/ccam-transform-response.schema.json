@@ -8,14 +8,22 @@
     "uniqueCodes",
     "multiActivityCodes",
     "phasedRecords",
-    "populatedTails",
+    "populatedNmbrTooth",
     "emptyTariffRecords",
+    "validationChecks",
+    "humanReviewItems",
+    "deterministicDecisions",
+    "nmbrToothDecisions",
+    "notes",
     "blockingErrors"
   ],
   "properties": {
     "status": {
       "type": "string",
-      "enum": ["PASS", "FAIL"]
+      "enum": [
+        "PASS",
+        "FAIL"
+      ]
     },
     "outputPath": {
       "type": "string"
@@ -36,13 +44,120 @@
       "type": "integer",
       "minimum": 0
     },
-    "populatedTails": {
+    "populatedNmbrTooth": {
       "type": "integer",
       "minimum": 0
     },
     "emptyTariffRecords": {
       "type": "integer",
       "minimum": 0
+    },
+    "validationChecks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "status",
+          "details"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PASS",
+              "FAIL",
+              "WARNING"
+            ]
+          },
+          "details": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "humanReviewItems": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "category",
+          "reason",
+          "decision",
+          "sourceText"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string"
+          },
+          "sourceText": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "deterministicDecisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "category",
+          "decision"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "nmbrToothDecisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "rule",
+          "result"
+        ],
+        "properties": {
+          "rule": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     },
     "blockingErrors": {
       "type": "array",
