@@ -1,68 +1,27 @@
 {
   "test": {
-  "version": "V84.00",
-  "excelFile": "input/CCAM_V84_VF.xls"
+    "version": "V84.00",
+    "excelFile": "input/CCAM_V84_VF.xls"
   },
+
   "source": {
     "ccamPageUrl": "https://www.ameli.fr/accueil-de-la-ccam/telechargement/index.php"
   },
 
-  "schedule": {
-    "dailyCheckTime": "TODO"
-  },
+  "paths": {
+    "state": "state/workflow.json",
+    "transformSchema": "schemas/ccam-transform-response.schema.json",
+    "transformSkill": ".claude/skills/ccam-transform/SKILL.md",
+    "reviewReportScript": "scripts/New-CcamReviewReport.ps1",
+    "reviewTemplate": "Context/ccam-review-report.template.html",
 
-  "review": {
-    "reminderIntervalDays": 5,
-    "maxReminders": 3
+    "inputDirectory": "input",
+    "reviewDirectory": "review",
+    "workDirectory": "work"
   },
 
   "connector": {
-    "type": "outlook",
     "reviewer": "dragan.draganov@dxc.com",
     "technicalContact": "dragan.draganov@dxc.com"
-  },
-
-  "graphTalk": {
-    "inputDirectory": "TODO"
-  },
-
-  "gtMonitor": {
-    "batchName": "TODO",
-    "requestMethod": "TODO",
-    "requestTarget": "TODO",
-
-    "logs": {
-      "executionLogDirectory": "TODO",
-      "executionLogPattern": "TODO",
-      "successMarker": "TODO",
-      "errorLogDirectory": "TODO",
-      "errorLogPattern": "TODO"
-    }
-  },
-
-  "workflow": {
-    "stateFile": "state/workflow.json",
-
-    "directories": {
-      "input": "input",
-      "work": "work",
-      "review": "review",
-      "approved": "approved",
-      "logs": "logs"
-    }
-  },
-
-  "ai": {
-    "sourceInterpreter": {
-      "model": "TODO"
-    },
-
-    "transformationAgent": {
-      "model": "TODO"
-    },
-
-    "errorAnalysisAgent": {
-      "model": "TODO"
-    }
   }
 }

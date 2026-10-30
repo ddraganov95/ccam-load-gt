@@ -219,13 +219,27 @@ SKILL_NOT_FOUND
             throw "Source Excel file not found: $SourceExcelPath"
         }
 
-        $OutputDirectory = Join-Path $ProjectRoot $Config.paths.outputDirectory
-        if (-not (Test-Path -LiteralPath $OutputDirectory)) {
-            New-Item -ItemType Directory -Path $OutputDirectory | Out-Null
-        }
+        $ReviewDirectory = Join-Path `
+    $ProjectRoot `
+    $Config.paths.reviewDirectory
 
-        $SafeVersion = $Version -replace '[^A-Za-z0-9._-]', '_'
-        $OutputPath = Join-Path $OutputDirectory "CCAM_${SafeVersion}_normalise.csv"
+$SafeVersion = $Version -replace '[^A-Za-z0-9._-]', '_'
+
+$ReviewVersionDirectory = Join-Path `
+    $ReviewDirectory `
+    $SafeVersion
+
+if (-not (Test-Path -LiteralPath $ReviewVersionDirectory)) {
+    New-Item `
+        -ItemType Directory `
+        -Path $ReviewVersionDirectory `
+        -Force |
+        Out-Null
+}
+
+$OutputPath = Join-Path `
+    $ReviewVersionDirectory `
+    "CCAM_${SafeVersion}_normalise.csv"
 
         try {
             $Schema = Get-Content -LiteralPath $TransformSchemaPath -Raw |
@@ -258,30 +272,116 @@ Return the complete structured transformation report required by the skill and t
         Write-Host "Source: $SourceExcelPath"
         Write-Host "Output: $OutputPath"
 
-        $ClaudeRawResult = $Prompt |
+       $ClaudeErrorPath = Join-Path `
+    $ReviewVersionDirectory `
+    "claude-error.txt"
+
+Remove-Item `
+    -LiteralPath $ClaudeErrorPath `
+    -Force `
+    -ErrorAction SilentlyContinue
+
+$ClaudeRawResult = $Prompt |
     & claude `
         -p `
         --dangerously-skip-permissions `
         --output-format json `
-        --json-schema $Schema
+        --json-schema $Schema `
+        2> $ClaudeErrorPath
 
-        if ($LASTEXITCODE -ne 0) {
-            throw "Claude transformation failed with exit code $LASTEXITCODE."
+$ClaudeExitCode = $LASTEXITCODE
+
+if ($ClaudeExitCode -ne 0) {
+    $ClaudeError = ""
+
+    if (Test-Path -LiteralPath $ClaudeErrorPath) {
+        $ClaudeErrorContent = Get-Content `
+            -LiteralPath $ClaudeErrorPath `
+            -Raw
+
+        if ($null -ne $ClaudeErrorContent) {
+            $ClaudeError = $ClaudeErrorContent.Trim()
         }
+    }
 
+    $ClaudeStdout = ""
+
+    if ($null -ne $ClaudeRawResult) {
+        $ClaudeStdout = (
+            $ClaudeRawResult |
+            Out-String
+        ).Trim()
+    }
+
+    # Try to extract Claude's useful error from its JSON envelope.
+    $ClaudeSummary = $null
+
+    if (-not [string]::IsNullOrWhiteSpace($ClaudeStdout)) {
         try {
-            $ClaudeResponse = $ClaudeRawResult | ConvertFrom-Json
+            $ClaudeFailureResponse = $ClaudeStdout |
+                ConvertFrom-Json
+
+            if (-not [string]::IsNullOrWhiteSpace(
+                [string]$ClaudeFailureResponse.result
+            )) {
+                $ClaudeSummary =
+                    [string]$ClaudeFailureResponse.result
+            }
+            elseif (-not [string]::IsNullOrWhiteSpace(
+                [string]$ClaudeFailureResponse.api_error
+            )) {
+                $ClaudeSummary =
+                    [string]$ClaudeFailureResponse.api_error
+            }
         }
         catch {
-            throw "Claude returned invalid JSON: $($_.Exception.Message)"
+            # Keep the raw stdout fallback below.
         }
+    }
 
-        if ($ClaudeResponse.is_error -eq $true) {
-            throw "Claude returned a transformation error."
+    if ([string]::IsNullOrWhiteSpace($ClaudeSummary)) {
+        if (-not [string]::IsNullOrWhiteSpace($ClaudeError)) {
+            $ClaudeSummary = $ClaudeError
         }
-        if ($null -eq $ClaudeResponse.structured_output) {
-            throw "Claude did not return structured transformation output."
+        elseif (-not [string]::IsNullOrWhiteSpace($ClaudeStdout)) {
+            $ClaudeSummary = $ClaudeStdout
         }
+        else {
+            $ClaudeSummary = "Claude returned no error details."
+        }
+    }
+
+    throw @"
+Claude transformation failed.
+
+Exit code:
+$ClaudeExitCode
+
+Claude error:
+$ClaudeSummary
+"@
+}
+
+Remove-Item `
+    -LiteralPath $ClaudeErrorPath `
+    -Force `
+    -ErrorAction SilentlyContinue
+
+try {
+    $ClaudeResponse = $ClaudeRawResult |
+        ConvertFrom-Json
+}
+catch {
+    throw "Claude returned invalid JSON: $($_.Exception.Message)"
+}
+
+if ($ClaudeResponse.is_error -eq $true) {
+    throw "Claude returned a transformation error."
+}
+
+if ($null -eq $ClaudeResponse.structured_output) {
+    throw "Claude did not return structured transformation output."
+}
 
         $Result = $ClaudeResponse.structured_output
         Write-Host ""
@@ -573,17 +673,11 @@ if (-not (Test-Path -LiteralPath $CandidateFile)) {
     throw "Candidate output file does not exist: $CandidateFile"
 }
 
-$CandidateHash = (
-    Get-FileHash `
-        -LiteralPath $CandidateFile `
-        -Algorithm SHA256
-).Hash
 $ReviewReport = & $ReviewReportScriptPath `
     -ProjectRoot $ProjectRoot `
     -TransformResult $TransformResult `
     -Version $DetectedVersion `
-    -CandidateFile $CandidateFile `
-    -CandidateHash $CandidateHash
+    -CandidateFile $CandidateFile
 
 if ($null -eq $ReviewReport) {
     throw "Review report generator returned no result."
@@ -595,10 +689,8 @@ if (-not (Test-Path -LiteralPath $ReviewReport.reportPath)) {
 $State.status = "AWAITING_APPROVAL"
 
 $State.artifacts.candidateFile = $CandidateFile
-$State.artifacts.candidateHash = $CandidateHash
 
 $State.review.reportFile = $ReviewReport.reportPath
-$State.review.reportHash = $ReviewReport.reportHash
 
 $State.transformation = $TransformResult
 $State.transformedAt = (Get-Date).ToUniversalTime().ToString("o")
@@ -611,7 +703,6 @@ $State |
         Write-Host "Transformation completed successfully."
         Write-Host "Status: AWAITING_APPROVAL"
         Write-Host "Candidate file: $CandidateFile"
-        Write-Host "Candidate SHA-256: $CandidateHash"
         Write-Host "Review report: $($ReviewReport.reportPath)"
         Write-Host "Human review items: $($ReviewReport.reviewCount)"
         Write-Host "Records: $($TransformResult.totalRecords)"
@@ -652,14 +743,11 @@ catch {
         $TechnicalContact = [string]$Config.connector.technicalContact
     }
 
-    $EmailReason = @"
+$EmailReason = @"
 $FailureReason
 
 PowerShell location:
 $FailurePosition
-
-Full error:
-$FailureDetails
 "@
 
     if (-not [string]::IsNullOrWhiteSpace($TechnicalContact)) {

@@ -9,10 +9,7 @@ param(
     [string]$Version,
 
     [Parameter(Mandatory)]
-    [string]$CandidateFile,
-
-    [Parameter(Mandatory)]
-    [string]$CandidateHash
+    [string]$CandidateFile
 )
 
 $ErrorActionPreference = "Stop"
@@ -27,8 +24,9 @@ function ConvertTo-HtmlText {
     return [System.Net.WebUtility]::HtmlEncode([string]$Value)
 }
 
-$TemplatePath = Join-Path $ProjectRoot "Context\ccam-review-report.template.html"
-$ReviewDirectory = Join-Path $ProjectRoot "review"
+$TemplatePath = Join-Path `
+    $ProjectRoot `
+    "Context\ccam-review-report.template.html"
 
 if (-not (Test-Path -LiteralPath $TemplatePath)) {
     throw "CCAM review template not found: $TemplatePath"
@@ -38,18 +36,32 @@ if (-not (Test-Path -LiteralPath $CandidateFile)) {
     throw "Candidate file not found: $CandidateFile"
 }
 
-if (-not (Test-Path -LiteralPath $ReviewDirectory)) {
-    New-Item -ItemType Directory -Path $ReviewDirectory | Out-Null
+$CandidateDirectory = Split-Path `
+    -Parent `
+    $CandidateFile
+
+if (:IsNullOrWhiteSpace($CandidateDirectory)) {
+    throw "Unable to determine candidate directory from: $CandidateFile"
+}
+
+if (-not (Test-Path -LiteralPath $CandidateDirectory)) {
+    throw "Candidate directory not found: $CandidateDirectory"
 }
 
 $SafeVersion = $Version -replace '[^A-Za-z0-9._-]', '_'
-$ReportPath = Join-Path $ReviewDirectory "CCAM_${SafeVersion}_review.html"
-$Html = Get-Content -LiteralPath $TemplatePath -Raw
+
+$ReportPath = Join-Path `
+    $CandidateDirectory `
+    "CCAM_${SafeVersion}_review.html"
+
+$Html = Get-Content `
+    -LiteralPath $TemplatePath `
+    -Raw
 
 $GeneratedAt = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
 $RunId = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
 $CurrentFileName = [System.IO.Path]::GetFileName($CandidateFile)
-
+$CandidateFileUri = ([System.Uri]$CandidateFile).AbsoluteUri
 # Previous-version comparison will populate these later.
 $PreviousVersion = "N/A"
 $PreviousDate = "N/A"
@@ -105,7 +117,7 @@ $Values = [ordered]@{
     '{{CURRENT_VERSION}}' = ConvertTo-HtmlText $Version
     '{{CURRENT_DATE}}' = ConvertTo-HtmlText $CurrentDate
     '{{CURRENT_FILE_NAME}}' = ConvertTo-HtmlText $CurrentFileName
-    '{{CURRENT_FILE_SHA256}}' = ConvertTo-HtmlText $CandidateHash
+    '{{CANDIDATE_FILE_URI}}' = ConvertTo-HtmlText $CandidateFileUri
     '{{ADDED_COUNT}}' = [string]$AddedCount
     '{{REMOVED_COUNT}}' = [string]$RemovedCount
     '{{CHANGED_COUNT}}' = [string]$ChangedCount
