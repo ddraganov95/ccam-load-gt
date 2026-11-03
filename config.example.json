@@ -1,0 +1,27 @@
+{
+  "test": {
+    "excelFile": "input/CCAM_TEST.xls"
+  },
+  "source": {
+    "ccamExcelUrl": "<CCAM_SOURCE_URL>",
+    "versionSheet": "CCAM",
+    "versionCell": "E1"
+  },
+  "paths": {
+    "state": "state/workflow.json",
+    "transformSchema": "schemas/ccam-transform-response.schema.json",
+    "transformSkill": ".claude/skills/ccam-transform/SKILL.md",
+    "reviewReportScript": "scripts/New-CcamReviewReport.ps1",
+    "reviewTemplate": "Context/ccam-review-report.template.html",
+    "inputDirectory": "input",
+    "reviewDirectory": "<REVIEW_DIRECTORY>",
+    "workDirectory": "work"
+  },
+  "graphTalk": {
+    "endpoint": "<GRAPHTALK_ENDPOINT>"
+  },
+  "connector": {
+    "reviewer": "<REVIEWER_EMAIL>",
+    "technicalContact": "<TECHNICAL_CONTACT_EMAIL>"
+  }
+}

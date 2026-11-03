@@ -1,508 +1,638 @@
-# AI-Enabled CCAM Loading into GraphTalk
+# CCAM → GraphTalk Automation
 
-## Purpose
+## Say Goodbye to Manual CCAM Loading
 
-This repository implements a human-in-the-loop workflow for detecting new CCAM releases, transforming the official source data into a GraphTalk-compatible load file, obtaining human review, and triggering the existing GraphTalk CCAM batch through GTMonitor.
+## This Repo Includes the Solution To:
 
-The design deliberately separates deterministic orchestration from AI reasoning:
+- Manual checking for new CCAM versions.
+- Manual transformation into a new CCAM CSV file ready for GraphTalk.
+- Streamlined GraphTalk loading.
 
-- **PowerShell** owns scheduling, state, hashing, retries, reminders, file handling, and workflow transitions.
-- **AI agents** interpret changed source content, perform the CCAM transformation, and analyse error logs when deterministic processing fails.
-- **A human reviewer** approves the generated artifact or edits and submits the final version.
-- **A connector** abstracts notifications and human approval/submission so the workflow is not coupled to Outlook or any specific email provider.
-- **GTMonitor** listens for batch requests and executes the existing GraphTalk CCAM load batch.
+## Overview
 
-## Problem
+This project automates the process of detecting, transforming, reviewing, and loading new CCAM releases into GraphTalk. It replaces a largely manual workflow with an automated pipeline that checks for new CCAM data, transforms it into the format required by GraphTalk, validates the result, generates a human-readable review report, and prepares the approved data for loading into GraphTalk.
 
-The current CCAM loading process requires manual work to:
+## Quick Start
 
-1. Check the official Ameli CCAM download page for a new release.
-2. Retrieve the relevant source data.
-3. Review CCAM codes, labels, tariffs, and other required source values.
-4. Transform those values into the text format expected by GraphTalk.
-5. Review the transformed artifact.
-6. Move the accepted file to the GraphTalk input location.
-7. Trigger the existing CCAM load batch.
-8. Investigate execution errors when loading fails.
+Once the prerequisites are installed and `config.json` is configured for the target environment, validate the setup:
 
-The objective is to automate repeatable work while retaining an explicit human control point before any generated artifact is loaded.
+```powershell
+./check-ccam.ps1 -Validate
+```
 
-## Source
+Run the normal workflow:
 
-Current CCAM information is retrieved from the configured official Ameli CCAM download page:
+```powershell
+./check-ccam.ps1
+```
 
-`https://www.ameli.fr/accueil-de-la-ccam/telechargement/index.php`
+To run the complete workflow using the local test workbook instead of downloading the current CCAM file:
 
-The URL must be deployment configuration rather than a value embedded throughout the implementation.
+```powershell
+./check-ccam.ps1 -Test
+```
+
+When a new CCAM workbook is detected and successfully processed, the workflow generates the GraphTalk candidate and HTML review report and sends a notification through Outlook.
+
+Open the review report, inspect the generated candidate, and submit it to GraphTalk when ready.
+
+For unattended execution, configure Windows Task Scheduler as described in [Setup & Prerequisites](#setup--prerequisites).
+
+## Table of Contents
+
+- [Architecture](#architecture)
+- [Workflow](#workflow)
+- [Project Structure](#project-structure)
+- [CCAM Transformation](#ccam-transformation)
+- [Validation](#validation)
+- [Human Review](#human-review)
+- [GraphTalk Integration](#graphtalk-integration)
+- [Automation / Scheduling](#automation--scheduling)
+- [Configuration](#configuration)
+- [Setup & Prerequisites](#setup--prerequisites)
+- [Running Locally](#running-locally)
+- [Test & Validation Modes](#test--validation-modes)
+- [Error Handling & Logging](#error-handling--logging)
+- [Design Decisions](#design-decisions)
+- [Technologies](#technologies)
+- [Current Status / Limitations](#current-status--limitations)
 
 ## Architecture
 
 ```text
-                         DAILY SCHEDULE
-                              |
-                              v
-                    +-------------------+
-                    | PowerShell        |
-                    | Workflow Controller|
-                    +---------+---------+
-                              |
-                 Download Ameli HTML
-                              |
-                              v
-                        SHA-256 hash
-                              |
-                +-------------+-------------+
-                |                           |
-             unchanged                    changed
-                |                           |
-                |                           v
-                |                 Low-cost AI interpreter
-                |                           |
-                |                   current CCAM version
-                |                   + source artifacts
-                |                           |
-                |                 +---------+---------+
-                |                 |                   |
-                |             already known          new
-                |                 |                   |
-                |                 |                   v
-                |                 |          supersede pending
-                |                 |          older release
-                |                 |                   |
-                |                 |                   v
-                |                 |          download source files
-                |                 |                   |
-                |                 |                   v
-                |                 |          Transformation Agent
-                |                 |                   |
-                |                 |                   v
-                |                 |          Candidate Artifact
-                |                 |                   |
-                |                 |                   v
-                |                 |          Notification Connector
-                |                 |                   |
-                |                 |                   v
-                |                 |             Human Review
-                |                 |             |          |
-                |                 |           accept      edit
-                |                 |             |          |
-                |                 |             +----+-----+
-                |                 |                  |
-                |                 |                  v
-                |                 |          Final Artifact Submitted
-                |                 |                  |
-                |                 |                  v
-                |                 |          Stage Approved Artifact
-                |                 |                  |
-                |                 |                  v
-                |                 |          Notify GTMonitor
-                |                 |                  |
-                |                 |                  v
-                |                 |          GTMonitor executes batch
-                |                 |                  |
-                |                 |                  v
-                |                 |          Inspect execution log
-                |                 |          /        |         \
-                |                 |      missing    error    completed
-                |                 |         |         |          |
-                |                 |         v         v          v
-                |                 |      technical   AI error   COMPLETED
-                |                 |      intervention analysis
-                |                 |                   |
-                +-----------------+-------------------+
-                                  |
-                             persisted state
+CCAM Source
+    ↓
+PowerShell Orchestration
+    ↓
+Claude Transformation
+    ↓
+Deterministic Validation
+    ↓
+HTML Review Package
+    ↓
+Human Review
+    ↓
+GraphTalk
 ```
 
-## Core Design Rules
+## Workflow
 
-### Deterministic workflow control
+1. **Download the latest CCAM workbook**  
+   The workflow downloads the current CCAM Excel workbook from the official source.
 
-AI agents do not own workflow state transitions. PowerShell evaluates deterministic conditions and persists the resulting state.
+2. **Compare the file hash**  
+   A hash is calculated for the downloaded workbook and compared with the hash of the previously processed version. If the hashes match, no further processing is required. If they differ, the new workbook continues through the pipeline.
 
-Examples include:
+3. **Clean the previous working files**  
+   Temporary and generated files from the previous run are removed before the new transformation begins.
 
-- comparing page hashes;
-- checking dates;
-- determining whether a reminder is due;
-- determining whether an artifact has been superseded;
-- checking for an expected GTMonitor log;
-- detecting the configured GTMonitor completion marker;
-- updating workflow state only after the relevant condition has been verified.
+4. **Transform with Claude**  
+   Claude Code uses the custom `ccam-transform` skill to process the workbook and generate structured transformation output.
 
-### AI is used for reasoning-heavy work
+5. **Generate and validate the candidate**  
+   The transformation result is converted into the semicolon-delimited CSV format required by GraphTalk. The candidate is validated before the workflow continues.
 
-AI is used for:
+6. **Generate the review package**  
+   The workflow creates an HTML review report alongside the candidate CSV so the generated output can be inspected.
 
-1. interpreting the Ameli page after its content changes;
-2. identifying the current CCAM version and required source artifacts;
-3. transforming CCAM source data according to the project prompt/instructions;
-4. analysing GTMonitor/GraphTalk error logs when a load fails.
+7. **Notify the reviewer**  
+   An Outlook notification is sent when the candidate is ready for review. Failures during the automated workflow also trigger an error notification via Outlook.
 
-The CCAM transformation rules are maintained in the transformation agent prompt/project instructions rather than duplicated in workflow orchestration code.
+8. **Human review**  
+   The reviewer uses the generated HTML report to inspect the transformation before initiating the load.
 
-### Mandatory human review
+9. **Load into GraphTalk**  
+   The approved candidate is submitted to GraphTalk through its SOAP interface.
 
-The transformation agent produces a **candidate artifact**, never a directly loadable approved artifact.
-
-The reviewer can:
-
-- approve the candidate unchanged; or
-- edit the candidate and submit the corrected artifact.
-
-In both cases, the artifact submitted through the connector becomes the **final artifact**.
-
-The loader must operate on that exact submitted artifact.
-
-### Connector abstraction
-
-The core workflow does not depend on Outlook or another specific communication product.
-
-The configured connector is responsible for:
-
-- issuing the initial review notification;
-- issuing review reminders;
-- allowing the reviewer to approve or submit a modified final artifact;
-- notifying the configured technical contact when intervention is required;
-- optionally notifying stakeholders of load success/failure.
-
-The workflow consumes connector-level events, such as:
+## Project Structure
 
 ```text
-FINAL_ARTIFACT_SUBMITTED
+ccam-load-gt/
+│
+├── .claude/
+│   └── skills/
+│       └── ccam-transform/
+│           └── SKILL.md
+│
+├── Context/
+│   ├── ccam-review-report.template.html
+│   ├── logo.jpg
+│   └── XML request example.xml
+│
+├── input/
+│   └── ccam-current.xls
+│
+├── schemas/
+│   ├── ccam-metadata-response.schema.json
+│   └── ccam-transform-response.schema.json
+│
+├── scripts/
+│   └── New-CcamReviewReport.ps1
+│
+├── state/
+│   └── workflow.json
+│
+├── work/
+│
+├── .gitignore
+├── check-ccam.ps1
+├── CLAUDE.md
+├── config.json
+├── LICENSE
+├── README.md
+├── run-ccam-hidden.vbs
+└── task.log
 ```
 
-rather than provider-specific concepts such as an email reply.
+### Key Components
 
-## Workflow States
+- **`check-ccam.ps1`**  
+  Main orchestration script. Controls the end-to-end CCAM workflow.
 
-The initial state machine is:
+- **`.claude/skills/ccam-transform/SKILL.md`**  
+  Custom Claude Code skill containing the instructions for interpreting and transforming CCAM data.
+
+- **`schemas/`**  
+  JSON schemas defining the structured outputs expected from the Claude transformations.
+
+- **`scripts/New-CcamReviewReport.ps1`**  
+  Generates the HTML report used to review the transformed CCAM candidate before loading.
+
+- **`Context/`**  
+  Supporting resources supplied to the workflow, including the HTML review template and GraphTalk XML request example.
+
+- **`input/ccam-current.xls`**  
+  The currently downloaded CCAM workbook used as the source for processing.
+
+- **`state/workflow.json`**  
+  Persists the minimal workflow state between executions, including the previously processed CCAM hash.
+
+- **`work/`**  
+  Temporary working directory containing intermediate and generated files for the current run.
+
+- **`config.json`**  
+  Central configuration for the automation.
+
+- **`run-ccam-hidden.vbs`**  
+  Launches the automation without displaying a PowerShell console, intended for unattended execution through Windows Task Scheduler.
+
+- **`task.log`**  
+  Captures output from scheduled and unattended executions for troubleshooting.
+
+## CCAM Transformation
+
+Instead of encoding the entire CCAM transformation logic directly into PowerShell, the project delegates the interpretation of the CCAM workbook to Claude Code.
+
+A custom `ccam-transform` skill defines the transformation rules and instructs Claude how to process the source workbook. Claude returns a structured JSON response validated against the schemas in `schemas/`.
+
+This creates a clear separation of responsibilities:
+
+- **PowerShell** controls the workflow.
+- **Claude Code** interprets and transforms the CCAM data.
+- **JSON schemas** enforce the expected structure of the AI output.
+- **Validation** verifies the generated candidate before it can proceed to review.
+
+## Validation
+
+Before a generated CCAM candidate can proceed to human review, the workflow validates the transformation output and the final CSV.
+
+The validation step acts as a safety boundary between the AI-assisted transformation and GraphTalk. It checks that the generated output follows the expected structure and that the candidate file satisfies the format required by GraphTalk.
+
+The final candidate is checked for requirements such as:
+
+- Expected number of fields per record.
+- Semicolon-delimited structure.
+- Required values and valid record structure.
+- Correct file encoding and line endings.
+- Detection of malformed or unexpected output.
+
+If validation fails, the workflow stops and reports the error instead of allowing an invalid candidate to continue toward GraphTalk.
+
+This ensures that Claude performs the transformation, but deterministic validation decides whether its output is acceptable.
+
+## Human Review
+
+The workflow intentionally keeps a human-in-the-loop before any generated CCAM data is loaded into GraphTalk.
+
+After transformation and validation succeed, `New-CcamReviewReport.ps1` generates an HTML review report from the structured transformation results. The report provides a human-readable view of the proposed CCAM update together with access to the generated candidate file.
+
+The reviewer can inspect the detected changes, transformation results, validation outcome, and any relevant warnings before deciding whether the candidate should be loaded.
+
+Once the review package is ready, the workflow sends an Outlook notification to the reviewer. The actual GraphTalk load remains a deliberate user action rather than an automatic consequence of the AI transformation.
+
+The final boundary is:
 
 ```text
-DETECTED
-   |
-   v
-TRANSFORMING
-   |
-   v
-AWAITING_REVIEW
-   |
-   v
-APPROVED
-   |
-   v
-LOADING
-  / | \
- /  |  \
-FAILED | COMPLETED
-       |
-MANUAL_INTERVENTION_REQUIRED
+AI Transformation → Deterministic Validation → Human Review → GraphTalk Load
 ```
+### Review Report
 
-Any non-completed version may transition to:
+The generated review report provides the reviewer with the CCAM version change, items requiring human confirmation, and validated transformation statistics.
+
+![CCAM review and transformation summary](docs/ccam-review-summary.png)
+
+The same report provides access to the generated candidate and the action used to submit the reviewed candidate to GraphTalk.
+
+![CCAM candidate and GraphTalk submission](docs/ccam-review-approval.png)
+
+## GraphTalk Integration
+
+After human review, the generated candidate can be submitted to GraphTalk directly from the HTML review report.
+
+The integration builds a SOAP request and sends it to the configured GraphTalk endpoint using the existing `GraphTalkRunTrx` mechanism.
+
+The request invokes:
+
+- **Package:** `rfrnc`
+- **Theme:** `trx_upgrade`
+- **Transaction:** `load_rfrnc_param_vals`
+- **Type:** `ccam_ro`
+- **Mode:** `save`
+- **Candidate path:** supplied through `file_name`
+
+The integration does not modify the underlying GraphTalk data directly. It submits the generated candidate to the existing GraphTalk transaction, which remains responsible for processing and loading the reference data.
+
+Because the request is sent from the browser in `no-cors` mode, the review page cannot inspect the SOAP response or confirm the final GraphTalk transaction result. The page only confirms that the load request was submitted. The final result must be verified on the GraphTalk side.
+
+## Automation / Scheduling
+
+The CCAM check is designed to run unattended using Windows Task Scheduler.
+
+The scheduled task launches `run-ccam-hidden.vbs`, which starts the PowerShell automation without displaying an interactive console window. `check-ccam.ps1` then performs the normal workflow, beginning with downloading the latest CCAM workbook and comparing its hash with the previously processed version.
+
+If the workbook has not changed, the run ends without starting a new transformation. If a change is detected, the full transformation and review workflow begins.
+
+Output from unattended executions is written to `task.log`, while relevant workflow notifications and failures can also be sent via Outlook. Together, these provide visibility into scheduled executions and make failures easier to diagnose.
+
+This allows the system to check for new CCAM releases automatically while keeping the actual GraphTalk load behind the human review step.
+
+## Configuration
+
+Runtime configuration is stored in `config.json`, keeping environment-specific values and paths separate from the main automation logic.
+
+The configuration is divided into five sections:
+
+- **`test`**  
+  Defines the local CCAM Excel file used when running the workflow in test mode.
+
+- **`source`**  
+  Defines the CCAM source URL and the workbook location used to extract the CCAM version. The current configuration reads the version from sheet `CCAM`, cell `E1`.
+
+- **`paths`**  
+  Defines the locations of workflow resources and output directories, including:
+  - Workflow state
+  - JSON transformation schema
+  - Claude transformation skill
+  - Review report generator
+  - HTML report template
+  - Input directory
+  - Working directory
+  - Final review/output directory
+
+- **`graphTalk`**  
+  Defines the GraphTalk endpoint used when submitting an approved candidate.
+
+- **`connector`**  
+  Defines the reviewer and technical contact used for workflow notifications.
+
+The configuration allows paths, endpoints, contacts, and source information to be changed without modifying the orchestration scripts.
+
+> **Note:** `state/workflow.json` is not configuration. It contains runtime state maintained between executions, while `config.json` defines how the automation should operate.
+
+## Setup & Prerequisites
+
+### PowerShell
+
+The automation requires **PowerShell 7**.
+
+The scheduled workflow is launched through `run-ccam-hidden.vbs`, which starts the project using the PowerShell 7 executable:
 
 ```text
-SUPERSEDED
+C:\Program Files\PowerShell\7\pwsh.exe
 ```
 
-### State definitions
+### Claude Code
 
-| State | Meaning |
-|---|---|
-| `DETECTED` | A previously unknown CCAM release has been identified. |
-| `TRANSFORMING` | Source artifacts are being transformed. |
-| `AWAITING_REVIEW` | A candidate exists and the human reviewer has been notified. |
-| `APPROVED` | The reviewer has submitted the final artifact. |
-| `LOADING` | The approved artifact has been staged and GTMonitor execution has been requested. |
-| `COMPLETED` | The expected GTMonitor execution log confirms successful completion. |
-| `FAILED` | Transformation or loading failed and diagnostic information is available. |
-| `MANUAL_INTERVENTION_REQUIRED` | Expected deterministic evidence, such as the GTMonitor execution log, is missing or cannot be evaluated safely. |
-| `SUPERSEDED` | A newer CCAM release replaced this release before completion. |
+Claude Code must be installed, configured, and available through `PATH` for the Windows user running the automation.
 
-## Supersession Rule
+Verify that the CLI is available:
 
-A newer CCAM version completely replaces an older version that has not completed successfully.
+```powershell
+claude --version
+```
+
+The project transformation skill must remain available at:
+
+```text
+.claude/skills/ccam-transform/SKILL.md
+```
+
+After setup, run Validation Mode:
+
+```powershell
+./check-ccam.ps1 -Validate
+```
+
+Validation Mode verifies both that the Claude CLI is available and that Claude can read the project's `ccam-transform` skill.
+
+### Outlook
+
+Microsoft Outlook must be installed and configured for the Windows user running the automation.
+
+The workflow uses Outlook COM to send review and failure notifications. Outlook must therefore be able to send email programmatically without requiring user confirmation.
+
+Run Validation Mode after setup to verify that an email can be sent successfully:
+
+```powershell
+./check-ccam.ps1 -Validate
+```
+
+### Windows Task Scheduler
+
+The automation can be scheduled using Windows Task Scheduler.
+
+The current setup runs the CCAM check once per day at **08:00**.
+
+#### General
+
+Create a task named:
+
+```text
+CCAM Daily Check
+```
+
+Configure the task to:
+
+- Run under the Windows account that has access to the project, Outlook, and required network resources.
+- Select **Run only when user is logged on**.
+- Configure the task for **Windows Server 2025**.
+- Highest privileges are not required.
+
+> The task runs only while the configured user is logged on. This is required by the current Outlook COM-based notification setup.
+
+#### Trigger
+
+Create a daily trigger:
+
+```text
+Daily at 08:00
+```
+
+#### Action
+
+Create a **Start a program** action with:
+
+**Program/script:**
+
+```text
+C:\Windows\System32\wscript.exe
+```
+
+**Add arguments:**
+
+```text
+"<PROJECT_ROOT>\run-ccam-hidden.vbs"
+```
+
+**Start in:**
+
+```text
+<PROJECT_ROOT>
+```
 
 Example:
 
 ```text
-V84.00 = COMPLETED
-V85.00 = AWAITING_REVIEW
-V86.00 = detected
+D:\Users\ddraganov\ccam-load-gt
 ```
 
-The resulting workflow is:
+`run-ccam-hidden.vbs` launches the PowerShell workflow without displaying a console window during scheduled execution.
+
+#### Conditions
+
+No additional idle, power, wake, or network conditions are required.
+
+#### Settings
+
+Enable:
+
+- **Allow task to be run on demand**
+- **Run task as soon as possible after a scheduled start is missed**
+- **If the running task does not end when requested, force it to stop**
+
+For overlapping executions, use:
 
 ```text
-V84.00 = COMPLETED
-V85.00 = SUPERSEDED
-V86.00 = DETECTED / active workflow
+Do not start a new instance
 ```
 
-After V85.00 becomes `SUPERSEDED`:
+After creating the task, run it manually once and check `task.log` to confirm that the scheduled execution completes successfully.
 
-- review reminders stop;
-- approval of V85.00 must not initiate loading;
-- V85.00 artifacts remain available for traceability;
-- processing continues with V86.00.
+## Running Locally
 
-Supersession is enforced by deterministic workflow logic, not by an AI decision.
+The workflow can be executed manually from the repository root using PowerShell 7:
 
-## Daily Detection Workflow
+```powershell
+pwsh ./check-ccam.ps1
+```
 
-A Windows scheduled task executes the PowerShell controller once per day.
+A normal run uses the settings defined in `config.json` and follows the same workflow as a scheduled execution:
 
-The controller:
+1. Download the latest CCAM workbook.
+2. Compare its hash against the previously processed version.
+3. If a change is detected, clean the working directory and start the transformation.
+4. Validate the generated candidate.
+5. Generate the HTML review report.
+6. Send the review notification through Outlook.
 
-1. Downloads the configured Ameli page using `curl.exe`.
-2. Computes SHA-256 for the downloaded HTML.
-3. Loads the persisted state.
-4. Processes any due human-review reminder.
-5. Compares the new page hash with the stored page hash.
-6. If unchanged, terminates without invoking the source-interpreter AI.
-7. If changed, invokes a low-cost AI model to interpret the current page.
-8. Requires a structured response identifying the current CCAM version and required source artifacts.
-9. Compares the detected version with workflow state.
-10. Starts a new workflow only when a genuinely new release is identified.
+The generated working files are stored under `work/`, while the final review package is written to the `reviewDirectory` configured in `config.json`.
 
-A page-hash change means only **the source page changed**. It does not by itself mean a new CCAM version was released.
+Running the script manually is useful during development and troubleshooting because the PowerShell output is immediately visible instead of running silently through Windows Task Scheduler.
 
-## Source Interpreter Contract
+## Test & Validation Modes
 
-The AI source interpreter must return machine-readable structured output.
+The workflow provides separate modes for testing the CCAM pipeline and validating the execution environment.
 
-Illustrative response:
+### Test Mode
+
+When test mode is enabled, the workflow bypasses the external CCAM download and uses the local workbook configured under `test.excelFile` in `config.json`.
+
+The test workbook is configured in `config.json`:
 
 ```json
-{
-  "version": "V85.00",
-  "sourceArtifacts": [
-    {
-      "type": "CCAM_SOURCE",
-      "url": "https://example/source"
-    }
-  ],
-  "confidence": "high"
+"test": {
+  "excelFile": "input/CCAM_V84_VF.xls"
 }
 ```
 
-The controller validates required fields before creating or changing workflow state.
+Run it from the project root with:
 
-The interpreter must identify the **current** CCAM release rather than historical releases also present on the webpage.
-
-## Transformation
-
-For a newly detected release:
-
-1. The required official source artifacts are downloaded.
-2. State becomes `TRANSFORMING`.
-3. The transformation agent receives the source artifacts and project transformation instructions.
-4. The agent generates the GraphTalk-compatible candidate file.
-5. The candidate artifact is hashed and placed in the review area.
-6. State becomes `AWAITING_REVIEW`.
-7. The connector sends the review request.
-
-Detailed transformation rules belong in the transformation agent prompt/project instructions.
-
-## Human Review and Reminders
-
-The reviewer receives the candidate through the configured connector.
-
-The reviewer either approves it unchanged or edits and submits a replacement final artifact.
-
-The controller records the final artifact and its SHA-256 before progressing to loading.
-
-### Reminder policy
-
-When review is requested, state records a date such as:
-
-```json
-{
-  "reviewRequestedAt": "2026-10-15T08:00:00Z",
-  "nextReminderAt": "2026-10-20T08:00:00Z",
-  "reminderCount": 0
-}
+```powershell
+./check-ccam.ps1 -Test
 ```
 
-During the daily run, when:
+The remaining transformation, validation, report generation, and notification workflow is then executed normally.
+
+This makes test mode useful for repeatable development and troubleshooting, since a known CCAM workbook can be processed without depending on the availability or content of the external source.
+
+### Validation Mode
+
+Validation mode performs a pre-flight check without downloading or transforming a CCAM workbook.
+
+Run it with:
+
+```powershell
+./check-ccam.ps1 -Validate
+```
+
+or using the shorter alias:
+
+```powershell
+./check-ccam.ps1 -v
+```
+
+Validation mode verifies that:
+
+- `config.json` exists, contains valid JSON, and includes the required source and connector settings.
+- `state/workflow.json` exists and contains valid JSON.
+- The transformation skill, transformation schema, and review report script exist at their configured paths.
+- The Claude CLI is installed and available through `PATH`.
+- Claude can read `.claude/skills/ccam-transform/SKILL.md`.
+- The transformation response schema contains valid JSON.
+- Outlook COM integration can create and send a validation review notification to the configured reviewer.
+
+Validation mode does not transform a workbook or generate a real review report. The Outlook test uses the placeholder path `VALIDATION_ONLY_NO_REPORT.html`.
+
+A successful run ends with:
 
 ```text
-status == AWAITING_REVIEW
-AND current time >= nextReminderAt
+Validation completed successfully.
 ```
 
-the connector sends a reminder, `reminderCount` is incremented, and the next configured reminder date is calculated.
+Both modes write their execution output to `task.log`.
 
-A superseded workflow never sends additional review reminders.
+## Error Handling & Logging
 
-The reminder interval and escalation policy are configuration values.
+The automation is designed to fail safely and provide enough information to diagnose unattended executions.
 
-## GraphTalk Loading Through GTMonitor
+### Logging
 
-After the final artifact is submitted:
-
-1. State becomes `APPROVED`.
-2. The controller confirms that the version remains active and has not been superseded.
-3. The exact approved artifact is copied to the predefined GraphTalk input directory.
-4. A batch request is sent to GTMonitor.
-5. GTMonitor listens for the request and executes the existing CCAM batch.
-6. State becomes `LOADING` while execution outcome is pending.
-
-## Determining Load Outcome
-
-The system uses GTMonitor/GraphTalk execution logs as the authoritative evidence of the batch result.
-
-### Successful load
-
-The expected execution log exists and contains the configured deterministic completion marker.
-
-The controller then:
-
-1. sets the workflow to `COMPLETED`;
-2. records the successfully loaded version as `processedVersion`.
-
-### Missing execution log
-
-If the expected log is not available according to the configured checking/retry policy:
-
-1. state becomes `MANUAL_INTERVENTION_REQUIRED`;
-2. the connector notifies the configured technical contact;
-3. `processedVersion` is not changed.
-
-### Execution error
-
-When error-specific logs are available:
-
-1. state becomes `FAILED`;
-2. relevant error logs are collected;
-3. an AI diagnostic agent analyses those logs;
-4. the connector sends the technical contact the failure information and AI-assisted analysis;
-5. `processedVersion` is not changed.
-
-The AI diagnostic agent does **not** decide whether the load succeeded. Success is determined using the configured deterministic GTMonitor log marker.
-
-## Persisted State
-
-Initial implementation uses JSON because the workflow has multiple related values and the state must be usable by PowerShell and readable by developers.
-
-Illustrative state:
-
-```json
-{
-  "processedVersion": "V84.00",
-  "detectedVersion": "V85.00",
-  "status": "AWAITING_REVIEW",
-  "pageHash": "<sha256>",
-  "detectedAt": "2026-10-15T08:00:00Z",
-  "reviewRequestedAt": "2026-10-15T08:10:00Z",
-  "nextReminderAt": "2026-10-20T08:10:00Z",
-  "reminderCount": 0,
-  "candidateArtifact": "review/CCAM_V85_candidate.txt",
-  "candidateArtifactHash": "<sha256>",
-  "finalArtifact": null,
-  "finalArtifactHash": null,
-  "lastError": null
-}
-```
-
-`processedVersion` changes only after successful load completion has been verified.
-
-## Initial Repository Structure
+Every execution creates a PowerShell transcript in `task.log`:
 
 ```text
-ccam-automation/
-|
-|-- README.md
-|-- CLAUDE.md
-|
-|-- detector/
-|   `-- check-ccam.ps1
-|
-|-- state/
-|   |-- workflow.json
-|   `-- archive/
-|
-|-- config/
-|
-|-- input/
-|
-|-- work/
-|
-|-- review/
-|
-|-- approved/
-|
-|-- logs/
-|
-`-- .claude/
-    `-- skills/
+=== CCAM START 2026-11-03 08:00:00 ===
+...
+=== CCAM END 2026-11-03 08:00:15 ===
 ```
 
-## Configuration
+The transcript captures the output of the workflow, including detected versions, hash comparisons, transformation progress, generated artifacts, validation results, warnings, and failures.
 
-Deployment-specific values must not be hard-coded into agent prompts or developer-specific paths.
+This is particularly useful when the workflow is executed silently through Windows Task Scheduler.
 
-Initial configuration should include:
+### Error Handling
 
-```text
-CCAM source URL
-review reminder interval
-reviewer connector/destination
-technical contact connector/destination
-GraphTalk input directory
-GTMonitor batch request configuration
-GTMonitor execution-log location/pattern
-GTMonitor success marker
-working directories
-AI model used for source interpretation
-AI model used for transformation
-AI model used for error-log analysis
+PowerShell is configured with:
+
+```powershell
+$ErrorActionPreference = "Stop"
 ```
 
-## Idempotency and Safety Requirements
+The main workflow is wrapped in a `try/catch` block so terminating errors stop execution instead of allowing the pipeline to continue with incomplete or invalid data.
 
-The workflow must be safe to run repeatedly.
+Additional checks are performed throughout the workflow for conditions such as:
 
-At minimum:
+- Missing or invalid configuration and state files.
+- Missing transformation skill, schema, or report generator.
+- CCAM download failures.
+- Missing or invalid CCAM workbooks.
+- Claude CLI failures or invalid structured output.
+- Failed transformation validation.
+- Missing candidate files.
+- Review report generation failures.
 
-- An unchanged page does not invoke AI unnecessarily.
-- The same CCAM release does not start multiple transformations.
-- The initial review request is not resent every day.
-- Reminders are controlled using persisted dates.
-- A superseded version cannot be loaded.
-- A completed version is not automatically reloaded.
-- `processedVersion` changes only after verified load success.
-- Missing logs cannot be interpreted as success.
-- AI analysis cannot override deterministic load-status checks.
-- The exact human-submitted artifact is the artifact staged for GraphTalk.
-- Workflow state must survive machine/process restarts.
-- Secrets and authentication credentials must not be stored in repository files or logs.
+Errors from external processes such as `curl` and Claude are captured and included in the reported failure where available.
 
-## Definition of Done for a CCAM Release
+### Failure Notifications
 
-A release is considered `COMPLETED` only after all of the following have occurred:
+When the workflow fails, the error is written to `task.log` and an Outlook notification is sent to the configured `technicalContact`.
 
-1. A new release was identified from the configured CCAM source.
-2. Required source artifacts were retrieved.
-3. The transformation produced a candidate artifact.
-4. A human reviewer submitted the final artifact.
-5. The exact final artifact was staged for loading.
-6. GTMonitor received the CCAM batch request.
-7. GTMonitor executed the batch.
-8. The expected execution log was located.
-9. The configured completion marker confirmed successful execution.
-10. Workflow state was updated and `processedVersion` was advanced.
+The notification includes:
 
-Anything before step 9 is an in-progress or failed workflow, not a successfully loaded CCAM release.
+- Failure reason.
+- PowerShell error location.
+- Current workflow status.
+- Detected CCAM version.
+- Computer and user running the automation.
+- Execution time.
+- Script path.
 
-## Remaining Implementation Decisions
+If Outlook itself cannot send the failure notification, the problem is written as a warning to the execution log instead.
 
-The architecture is sufficiently defined to begin implementation. Remaining decisions are implementation/configuration concerns rather than fundamental workflow questions:
+This means an unattended failure has two diagnostic paths: **the local `task.log` transcript and the Outlook failure notification**.
 
-- connector technology used in the first prototype;
-- exact connector event/payload for final artifact submission;
-- exact GTMonitor batch-request interface;
-- exact execution-log naming/location and completion marker;
-- retry/check policy while waiting for the GTMonitor execution log;
-- escalation rules after repeated unanswered review reminders;
-- production persistence mechanism if JSON becomes insufficient for the deployment environment.
+## Design Decisions
+
+Several implementation choices were driven by the environment in which the automation needs to run and by the goal of keeping the solution relatively simple.
+
+### Why PowerShell?
+
+PowerShell was chosen as the main orchestration layer because the automation runs in a Windows environment and needs to interact with Windows-native components such as Excel, Outlook, the filesystem, and Windows Task Scheduler.
+
+It also provides a lightweight way to coordinate the different parts of the workflow without introducing another application or service that would need to be deployed and maintained.
+
+### Why Claude?
+
+Claude Code was chosen because its agentic workflow fits the transformation problem well. It can work directly with the project files, follow the reusable `ccam-transform` skill, process the CCAM workbook, generate the required candidate file, and return a structured result to the PowerShell orchestration layer.
+
+This allows the complex CCAM transformation rules to remain in a dedicated skill rather than being hardcoded into the orchestration script.
+
+Claude was also a natural choice given DXC's existing relationship with Anthropic and the availability of Claude within the enterprise environment.
+
+### Why Outlook COM?
+
+Outlook COM was chosen because Outlook was already available in the Windows environment, providing a simple way to send workflow notifications without additional services.
+
+### Why Hash-Based Change Detection?
+
+The downloaded CCAM workbook is identified as changed by comparing its SHA-256 hash with the hash of the previously processed workbook.
+
+This makes change detection independent of the CCAM filename or version metadata. If the source workbook itself changes, the workflow detects it.
+
+### Why Human Review?
+
+The workflow intentionally stops short of making the GraphTalk update completely autonomous.
+
+Transformation, validation, report generation, and notification are automated, but the generated candidate can be inspected before the GraphTalk load is initiated.
+
+This keeps a human decision between the AI-assisted transformation and the target system.
+
+### Why Use the Existing GraphTalk Transaction?
+
+The automation does not reproduce GraphTalk's reference-data loading logic externally or attempt to update the underlying data directly.
+
+Instead, it submits the generated candidate through the existing `GraphTalkRunTrx` SOAP interface and the established `load_rfrnc_param_vals` transaction.
+
+This keeps the automation focused on preparing the CCAM candidate while leaving the actual reference-data processing to GraphTalk.
+
+## Technologies
+
+- **PowerShell 7** - Main workflow orchestration, validation, configuration, and error handling.
+- **Claude Code** - AI-assisted CCAM transformation using the custom `ccam-transform` skill and structured JSON output.
+- **Microsoft Excel COM** - Reading CCAM workbook metadata.
+- **Microsoft Outlook COM** - Review and failure email notifications.
+- **HTML / CSS / JavaScript** - Human review interface and GraphTalk load submission.
+- **SOAP / XML** - Communication with the GraphTalk transaction interface.
+- **JSON / JSON Schema** - Configuration, workflow state, and structured Claude output.
+- **Windows Task Scheduler** - Scheduled unattended execution.
+- **VBScript** - Hidden launch of the scheduled PowerShell workflow.
+- **cURL** - Downloading the latest CCAM workbook.
+- **SHA-256** - Detecting changes to the source CCAM workbook.
+
+## Current Status / Limitations
+
+- GraphTalk submission from the HTML cannot confirm the SOAP transaction result because of no-cors.
+- Final load success must be verified in GraphTalk.
+- Outlook COM requires Outlook to be configured for the execution user.
+- Scheduled Outlook notifications currently require that user to be logged on.
+- Claude Code must be installed/configured on the execution machine.
+- The VBS launcher currently contains machine-specific paths.

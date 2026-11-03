@@ -1,12 +1,12 @@
 **********************
 PowerShell transcript start
-Start time: 20261103125123
+Start time: 20261103132452
 Username: CSCFSG02\ddraganov
 RunAs User: CSCFSG02\ddraganov
 Configuration Name: 
 Machine: WSAMZN-CG7VVH7T (Microsoft Windows NT 10.0.26100.0)
 Host Application: C:\Program Files\PowerShell\7\pwsh.dll -NoProfile -ExecutionPolicy Bypass -File D:\Users\ddraganov\ccam-load-gt\check-ccam.ps1
-Process ID: 1092
+Process ID: 1072
 PSVersion: 7.6.6
 PSEdition: Core
 GitCommitId: 7.6.6
@@ -18,7 +18,7 @@ SerializationVersion: 1.1.0.1
 WSManStackVersion: 3.0
 **********************
 Transcript started, output file is D:\Users\ddraganov\ccam-load-gt\task.log
-=== CCAM START 2026-11-03 12:51:23 ===
+=== CCAM START 2026-11-03 13:24:52 ===
 CCAM Automation
 Project root: D:\Users\ddraganov\ccam-load-gt
 Working directory: D:\Users\ddraganov\ccam-load-gt
@@ -71,240 +71,234 @@ Claude structured result:
   "emptyTariffRecords": 944,
   "validationChecks": [
     {
-      "name": "Source workbook read",
+      "name": "Encoding: Windows-1252 sans BOM",
       "status": "PASS",
-      "details": "ccam-current.xls read through Excel (sheet CCAM, used range A1:Q30797, merged header rows included) into a UTF-8 dump; 30,797 physical rows processed in source order."
+      "details": "Fichier réécrit en CP1252 sans BOM ; relu depuis le disque ; iconv CP1252→UTF-8 réussit ; aucun caractère non représentable."
     },
     {
-      "name": "Applicability date",
+      "name": "Fins de ligne CRLF uniquement",
       "status": "PASS",
-      "details": "Exactly one header match 'CNAM - CCAM version 84 applicable 31/07/2026'; Date_str = 31/07/2026 used for all 13,443 records."
+      "details": "13443 CRLF ; 0 LF isolé ; 0 CR isolé ; fichier terminé par CRLF."
     },
     {
-      "name": "Logical Code blocks",
+      "name": "Structure : neuf champs par enregistrement",
       "status": "PASS",
-      "details": "8,261 CCAM code openers (pattern AAAA999). Chapter headings (e.g. 19.03.01) close the block. Bracketed annotations such as [F, P, S, U] and [A, J, K, T, 3] do not open blocks. 0 child rows without an open block."
+      "details": "13443 lignes, toutes à exactement 9 champs séparés par ';'."
     },
     {
-      "name": "Record reconstruction and uniqueness",
+      "name": "Champs obligatoires renseignés",
       "status": "PASS",
-      "details": "13,443 records, one per distinct (Code, Activity, Phase); 0 duplicate keys. Output of each code block is contiguous (8,261 runs for 8,261 codes)."
+      "details": "Code, Actvty, Phase, Label, Date, Group_code non vides pour toutes les lignes (0 vide)."
     },
     {
-      "name": "Nine fields per line",
+      "name": "Format des codes",
       "status": "PASS",
-      "details": "13,443 physical lines, each with exactly 9 semicolon-separated fields in the required order."
+      "details": "Tous les codes respectent le motif AAAA999 ; 8261 codes distincts."
     },
     {
-      "name": "Required fields populated",
+      "name": "Date d'applicabilité unique",
       "status": "PASS",
-      "details": "Code, Actvty, Phase, Label, Date_str and Group_code are non-empty on every record."
+      "details": "Une seule date trouvée dans l'en-tête (E1 : « CNAM - CCAM version 84 applicable 31/07/2026 ») ; 31/07/2026 utilisée partout."
     },
     {
-      "name": "Encoding",
+      "name": "Unicité de (Code, Activité, Phase)",
       "status": "PASS",
-      "details": "Windows-1252, no BOM; decode/re-encode round trip is byte-identical; 0 characters outside CP1252."
+      "details": "13443 combinaisons distinctes, 0 doublon."
     },
     {
-      "name": "Line endings and embedded breaks",
+      "name": "Libellés : espaces et sauts de ligne",
       "status": "PASS",
-      "details": "13,443 CRLF; 0 bare LF; 0 bare CR; no embedded CR/LF in records; file ends with CRLF."
+      "details": "0 libellé avec espace initial/final, espace double ou saut de ligne résiduel."
     },
     {
-      "name": "Code ownership",
+      "name": "Libellés : pas de tiret avant Phase N / Activité N",
       "status": "PASS",
-      "details": "Every Code matches the CCAM pattern and was the CodeValue opening its block. Blank Code cells inherit the opening code; no record takes a Code from the preceding block."
+      "details": "0 occurrence de ' - Phase N :' ou ' - Activité N :'."
     },
     {
-      "name": "Multi-activity and phased repetition",
+      "name": "Libellés : suffixes anesthésie et CEC",
       "status": "PASS",
-      "details": "4,942 codes have more than one Activity; Code is repeated for each. 58 phased records (Phase>0) repeat Code and Activity. 20 Activity 4 records are phase-specific anesthesia."
+      "details": "Suffixe ' - anesthésie' uniquement sur Activité 4 (4938 enregistrements) ; ' - circulation extracorporelle [CEC]' uniquement sur Activité 5 (177)."
     },
     {
-      "name": "No non-record rows emitted",
+      "name": "Cohérence des numéros dans les libellés",
       "status": "PASS",
-      "details": "No heading, Comprend, Facturation, Indication, Formation, Environnement, exclusion or parenthetical-reference row became a record. Every Activity value is 1-5 and every Code has the CCAM pattern."
+      "details": "Chaque 'Activité N :' correspond à l'Activité de l'enregistrement ; chaque 'Phase N :' correspond à la Phase de l'enregistrement ; 0 écart."
     },
     {
-      "name": "Label leakage and stacking",
+      "name": "Enregistrements phasés",
       "status": "PASS",
-      "details": "No label contains more than one 'Phase N :' or 'Activité N :' segment, and none contains Indication, Facturation, Formation :, Environnement :, 'Avec ou sans :' or '(GE' text."
+      "details": "58 enregistrements à phase > 0, chacun avec 'Phase N :' dans le libellé ; aucun code phasé n'a d'enregistrement d'anesthésie en phase 0."
     },
     {
-      "name": "Multiline labels",
+      "name": "Blocs de codes et Code hérité",
       "status": "PASS",
-      "details": "All label cells were reduced to one physical line. 8 multiline main labels were checked; continuation lines were retained or excluded according to the rules."
+      "details": "8261 blocs logiques ouverts par un CodeValue du motif acte ; chaque code possède un enregistrement Activité 1 ; aucun Code hérité d'un bloc précédent."
     },
     {
-      "name": "Phase and Activity dash rule",
+      "name": "Tarifs",
       "status": "PASS",
-      "details": "0 labels contain ' - Phase N :' and 0 contain ' - Activité N :'."
+      "details": "Format décimal à virgule, aucun zéro de fin ajouté, pas d'arrondi ; 'Non pris en charge' et cellules vides rendus vides ; 944 enregistrements avec tarifs vides (toujours les deux à la fois) ; aucun tarif littéral 0."
     },
     {
-      "name": "Semicolons in labels",
+      "name": "Nmbr_tooth : valeurs et portée",
       "status": "PASS",
-      "details": "0 labels contain a semicolon after serialisation; no label was truncated."
+      "details": "201 valeurs entières ≥ 2, uniquement sur l'enregistrement principal (Activité 1, phase 0) ; aucune valeur sur anesthésie, activités secondaires, CEC ou phases."
     },
     {
-      "name": "Tariff format",
+      "name": "Fin de ligne selon Nmbr_tooth",
       "status": "PASS",
-      "details": "Blank or 'Non pris en charge' values are empty (944 records, both tariffs empty together). Numeric values use a comma, have no added trailing zeroes, are not rounded, and have at most 2 decimals in the source. 0 tariffs of 0."
+      "details": "13242 lignes vides finissant par ';' ; 201 lignes peuplées finissant par le nombre sans ';' supplémentaire."
     },
     {
-      "name": "Nmbr_tooth line endings",
+      "name": "Délimiteur dans les libellés",
       "status": "PASS",
-      "details": "Empty Nmbr_tooth lines end with ';'; the 201 populated lines end with the integer and no extra ';'. 0 format defects."
+      "details": "Après sérialisation, 9 champs partout. Un seul libellé source contenait des ';' (YYYY010) : remplacés par '.'."
     },
     {
-      "name": "Nmbr_tooth rule conformance",
+      "name": "Absence de fuite et d'empilement de libellés",
       "status": "PASS",
-      "details": "0 closed N à M ranges populated; 0 Activity 4 records populated; every populated label is a dental/root/implant family; 0 'ou plus' populated except the validated implant families."
+      "details": "Libellés construits uniquement à partir du texte de l'acte courant ; aucune description d'activité ou de phase d'un autre acte ; aucun libellé tronqué."
     },
     {
-      "name": "Activity 5 CEC labels",
+      "name": "Activités sans enregistrement principal",
       "status": "PASS",
-      "details": "177 Activity 5 records, all ending ' - circulation extracorporelle [CEC]'."
+      "details": "0 code sans enregistrement Activité 1."
     },
     {
-      "name": "Anesthesia ownership",
+      "name": "Comparaison avec la sortie de référence (ancienne, normalisée)",
       "status": "PASS",
-      "details": "All 4,938 Activity 4 records end ' - anesthésie'. Phase-specific anesthesia reuses only the description of the same phase number (0 mismatches). No Activité text in any anesthesia label. One record per anesthesia key, so the multi-activity GLOBAL case yields a single Activity 4 record."
+      "details": "13443/13443 enregistrements identiques sur les neuf champs après normalisation (espaces, tirets Phase/Activité, fins de ligne). Référence utilisée uniquement comme contrôle, non comme source."
     },
     {
-      "name": "Independent reference comparison (informational)",
+      "name": "Exhaustivité de la lecture source",
       "status": "PASS",
-      "details": "Output is byte-identical to the existing V84 output in Context/CCAM_V84_GraphTalk_1.disabled.txt. The reference was used only as a cross-check: every label, tariff, group and Nmbr_tooth value was also derived from the workbook rules. Because a reference can carry defects, the rule checks above are the authority."
+      "details": "Feuille CCAM lue intégralement (30797 lignes, A1:Q30797, lecture seule) ; 0 ligne d'activité orpheline hors bloc de code."
     }
   ],
-  "humanReviewItems": [
-    {
-      "code": "HCGA223",
-      "category": "displaced-anesthesia-text",
-      "reason": "Activity 4 row R13459 has structural Activity 4 values, tariffs (134,39) and Group ADA, but its label cell reads 'Environnement : bloc opératoire et respect des recommandations relatives au plateau technique et au matériel d’endoscopie'. This is not the word 'anesthésie'.",
-      "decision": "Generated HCGA223;4;0 with label '<main label> - anesthésie' and tariff 134,39, following the displaced-text rule and the previous V84 output. Human to confirm the Activity 4 association.",
-      "sourceText": "Environnement : bloc opératoire et  respect des recommandations relatives au plateau technique et au matériel d’endoscopie"
-    },
-    {
-      "code": "LBGA052",
-      "category": "displaced-anesthesia-text",
-      "reason": "Activity 4 row R21032 has structural Activity 4 values, tariffs (57,51) and Group ADA, but its label cell is a billing note ('Facturation : ...' about agenesis), not the word 'anesthésie'.",
-      "decision": "Generated LBGA052;4;0 with label '<main label> - anesthésie' and tariff 57,51, following the displaced-text rule and the previous V84 output. Human to confirm the Activity 4 association.",
-      "sourceText": "Facturation : prise en charge chez l'adulte dans le cadre des agénésies dentaires multiples liées à une maladie rare"
-    }
-  ],
+  "humanReviewItems": [],
   "deterministicDecisions": [
     {
-      "code": "CCAM code blocks",
-      "category": "parsing",
-      "decision": "Only CCAM-pattern CodeValues (4 letters + 3 digits) open a block. Bracket annotations such as [F, P, S, U], [A, J, K, T, 3], [G] and [[E, F, P, S, U, Y, Z]] do not open blocks and do not close them. They are not Codes."
+      "code": "ALL",
+      "category": "block-reconstruction",
+      "decision": "8261 blocs logiques ouverts par chaque CodeValue du motif acte (4 lettres + 3 chiffres). Chaque enregistrement reprend le Code du bloc qui l'contient ; 13443 enregistrements générés, un par ligne d'activité."
     },
     {
-      "code": "Chapter headings",
-      "category": "parsing",
-      "decision": "Chapter/section numbers (e.g. 01.01, 19.03.01) close the current block. No child row follows a heading without a new CCAM code."
+      "code": "Lignes de section et modificateurs (ex. 19.03, lignes ~30724-30794)",
+      "category": "exclusion",
+      "decision": "Numéros de section, titres de chapitre et codes modificateurs (O, U, P, S, F, M, A, E, G, N, 9, D, Y, Z, B, H, Q, V, W, R, L, J, K, T, 3, 4, 5, 6, 7, 8) ferment le bloc courant et ne génèrent aucun enregistrement. Ce ne sont pas des actes CCAM ; l'ancienne sortie n'en contient pas non plus."
     },
     {
-      "code": "Chapter 19 modifier rows",
-      "category": "scope",
-      "decision": "23 single-letter modifier rows (O, U, P, S, F, M, A, E, G, N, D, Y, Z, B, H, Q, V, W, L, J, K, R, T; rows 30730-30753) carry tariffs but no Activité or Phase. They are not CCAM codes and produce no records, as in the previous V84 output. See notes."
+      "code": "Listes entre crochets dans la colonne Code (ex. [A, J, K, T, 3])",
+      "category": "exclusion",
+      "decision": "Ce ne sont pas des CodeValue : elles n'ouvrent ni ne ferment de bloc."
     },
     {
-      "code": "Anesthesia text without structure",
-      "category": "anesthesia",
-      "decision": "Two 'anesthésie' text rows with no Activité or tariff (R13460 in HCGA223, R21033 in LBGA052) produce no record, because no Activity 4 structural values follow them."
+      "code": "HCGA223 (lignes 13459-13460), LBGA052 (lignes 21032-21033)",
+      "category": "displaced-text",
+      "decision": "La ligne Activité 4 porte une note (Environnement / Facturation) dans Texte, et le texte 'anesthésie' figure sur la ligne physique suivante du même bloc. Associé à l'Activité 4 : libellé '<principal> - anesthésie'. Règle de texte déplacé appliquée, sans revue humaine."
     },
     {
-      "code": "Multiline main label MO EQLA665",
-      "category": "label",
-      "decision": "Excluded the 'Indication :' and 'Son utilisation est limitée...' continuation lines (indication and eligibility text). Label = first line."
+      "code": "EQLA665",
+      "category": "multiline-label",
+      "decision": "Première ligne retenue comme libellé principal ; lignes 'Indication : …' et 'Son utilisation est limitée …' exclues (indication et condition de facturation)."
     },
     {
-      "code": "Multiline main label HBLD318",
-      "category": "label",
-      "decision": "Retained continuation 'Avec ou sans recouvrement céramique', joined with one space (a short qualification that completes the act name)."
+      "code": "HBLD318",
+      "category": "multiline-label",
+      "decision": "'Avec ou sans recouvrement céramique' conservé (qualification directe du nom de l'acte), joint par une espace : 'Pose d'une couronne dentaire dentoportée en alliage précieux Avec ou sans recouvrement céramique'."
     },
     {
-      "code": "Multiline main label HHFC040",
-      "category": "label",
-      "decision": "Retained continuation 'rétablissement de la continuité, par cœlioscopie', joined with one space, because the line break splits the act name mid-sentence."
+      "code": "HHFC040",
+      "category": "multiline-label",
+      "decision": "Saut de ligne interne joint par une espace : '… sans rétablissement de la continuité, par cœlioscopie'."
     },
     {
-      "code": "Child continuation lines 'Avec ou sans :'",
-      "category": "label",
-      "decision": "Excluded 'Avec ou sans : ...' lines inside Phase/Activité child cells (HMGH001 R15449; MJMA006 R24017; MJMA014 R24026). Each is an option clause, not the act name."
+      "code": "EQGA214, HBGD358, HBGD402, HBGD171, HBLD030",
+      "category": "multiline-label",
+      "decision": "Ligne vide finale supprimée ; libellé inchangé."
     },
     {
-      "code": "Phase-specific anesthesia",
-      "category": "label",
-      "decision": "20 Activity 4 records with Phase>0 take the description of the same-numbered phase from the sibling phase row. Example: BDLA003;4;1 = '<main> Phase 1 : <desc> - anesthésie'. Anesthesia never crosses a phase boundary."
+      "code": "Cellules enfants multilignes (ex. ligne 15449, ligne 24017, ligne 24026)",
+      "category": "multiline-child",
+      "decision": "Seule la première ligne de la description d'activité ou de phase est retenue ; les lignes suivantes 'Avec ou sans : …' sont des conditions, exclues."
     },
     {
-      "code": "Non-breaking spaces",
-      "category": "normalisation",
-      "decision": "5 source cells contained U+00A0 inside 'Phase N :' text. Replaced with a regular space before whitespace collapse. Exact match to the reference label text was confirmed."
+      "code": "Libellés d'anesthésie (4938 enregistrements)",
+      "category": "label-construction",
+      "decision": "Phase 0 : '<principal> - anesthésie'. Phase N : '<principal> Phase N : <description> - anesthésie' (20 enregistrements). Jamais de numéro d'activité ni de description d'activité dans un libellé d'anesthésie."
     },
     {
-      "code": "Record order",
-      "category": "serialisation",
-      "decision": "Records are emitted within each Code block in source-row order of their first contributing row, which keeps phase and anesthesia records interleaved as in the previous V84 output."
+      "code": "31 codes avec Activité 2 ou 3 et anesthésie",
+      "category": "anesthesia-ownership",
+      "decision": "Séquence Activité 1 / 2 puis anesthésie dans la même phase : une seule anesthésie GLOBALE, libellé '<principal> - anesthésie', sans numéro d'activité. Aucun doublon (Code, Activité, Phase) n'est apparu. Décision déterministe, non soumise à revue."
     },
     {
-      "code": "Typo 'de19'",
-      "category": "parsing",
-      "decision": "HBGD282 'Avulsion de19 dents temporaires sur arcade' read as quantity 19 (Nmbr_tooth 19), in line with the reference."
+      "code": "Activité 5 CEC (177 enregistrements)",
+      "category": "label-construction",
+      "decision": "Libellé '<principal> - circulation extracorporelle [CEC]' ; tarifs et regroupement pris sur la ligne CEC."
+    },
+    {
+      "code": "Tarifs (944 enregistrements à tarifs vides)",
+      "category": "tariff",
+      "decision": "Tarifs numériques écrits avec virgule décimale, sans arrondi ni zéro ajouté. 'Non pris en charge' et cellules vides → champ vide. Aucun enregistrement n'a un seul tarif vide."
+    },
+    {
+      "code": "Group_code",
+      "category": "group",
+      "decision": "Regroupement lu sur la ligne même de chaque enregistrement (les lignes d'anesthésie portent leur propre regroupement, p. ex. ADA). Aucun Group_code vide."
+    },
+    {
+      "code": "YYYY010",
+      "category": "delimiter",
+      "decision": "Points-virgules présents dans le libellé principal remplacés par des points ; libellé non tronqué."
     }
   ],
   "nmbrToothDecisions": [
     {
-      "rule": "Exact-quantity avulsion, reimplantation and root/tooth-type procedures: 'Avulsion de N dents / racines / incisives / canines / prémolaires / troisièmes molaires / odontoïdes ...' or 'Réimplantation de N dents' with N>=2 (incl. 'ou plus', lower boundary N)",
-      "result": "Nmbr_tooth = N (98 records)"
+      "rule": "Renseigné uniquement sur l'enregistrement principal ordinaire (Activité 1, phase 0). Anesthésie (Activité 4), autres activités (2, 3, 5 dont CEC) et enregistrements de phase restent vides.",
+      "result": "201 valeurs renseignées ; aucune sur Activité 4, CEC ou phase."
     },
     {
-      "rule": "'Avulsion de N premières ou deuxièmes molaires' (no range) with N>=2",
-      "result": "Nmbr_tooth = N (included in the 98 above)"
+      "rule": "Quantité exacte N ≥ 2 de dents, racines, incisives, canines, prémolaires, molaires ou odontoïdes/dents surnuméraires dans Avulsion / Ablation / Exérèse / Réimplantation de N ... → N.",
+      "result": "96 valeurs (82 dents, dont 'Avulsion de 2 odontoïdes … ou de 2 dents surnuméraires' ; 14 racines ou séparations de racines). Ex. 'Avulsion de 29 dents permanentes sur arcade sans alvéolectomie' → 29."
     },
     {
-      "rule": "Prophylactic sealing 'Comblement ... sur N dents' with N>=2",
-      "result": "Nmbr_tooth = N (7 records)"
+      "rule": "Implants intrabuccaux : Pose / Ablation / Dégagement et activation de N implants ; Pose d'infrastructure coronaire sur N implants ; Pose de moyen de liaison sur N implants préprothétiques intraosseux intrabuccaux → N. La forme 'N ou plus' prend N comme borne inférieure car la famille numérotée est établie par les frères exacts.",
+      "result": "55 valeurs d'implants, dont 6 formes 'ou plus' (ex. 'Pose de 11 implants intraosseux intrabuccaux ou plus' → 11)."
     },
     {
-      "rule": "Validated intrabuccal implant families with plural N: 'Pose de N implants intraosseux intrabuccaux', 'Ablation de N implants ... résection osseuse', 'Dégagement et activation de N implants', 'Pose de moyen de liaison sur N implants préprothétiques intraosseux intrabuccaux', 'Pose d'infrastructure coronaire sur N implants'. 'N ou plus' uses the lower boundary N, i.e. the number in the label (11 or 5).",
-      "result": "Nmbr_tooth = N (53 records, 6 of them 'ou plus')"
+      "rule": "Prothèse 'comportant N dents' → N ; 'Comblement … sur N dents' → N ; Supplément 'pose de N dents contreplaquées (ou massives)' → N.",
+      "result": "25 prothèses, 7 comblements, 18 suppléments."
     },
     {
-      "rule": "Removable denture defined by exact tooth count: 'Pose d'une prothèse amovible ... comportant N dents' (N>=2)",
-      "result": "Nmbr_tooth = N (25 records)"
+      "rule": "Plage fermée 'N à M' ou 'de N à M dents' → vide ; 'moins de N dents' → vide.",
+      "result": "Ex. 'Avulsion de 17 dents à 19 dents permanentes …' → vide."
     },
     {
-      "rule": "Supplement differentiated by exact count: 'Supplément pour pose de N dents contreplaquées' (with or without 'ou massives'), N>=2",
-      "result": "Nmbr_tooth = N (18 records)"
+      "rule": "Quantité 1 (singulier) → vide.",
+      "result": "Aucune valeur 1 renseignée."
     },
     {
-      "rule": "Closed ranges 'N à M' (e.g. 'Avulsion de 8 dents à 10 dents', 'comportant 8 à 10 dents', 'de N à N dents')",
-      "result": "Nmbr_tooth empty"
+      "rule": "Supplément pour avulsion de N troisièmes molaires (quantité de l'acte référencé) → vide.",
+      "result": "YYYY755 → vide."
     },
     {
-      "rule": "Quantity 'moins de N dents' (supra-implant prosthesis) and singular forms (1 dent, 1 implant, 1 racine, 1 élément)",
-      "result": "Nmbr_tooth empty"
+      "rule": "Barre de conjonction entre N implants → vide.",
+      "result": "Vide dans tous les cas."
     },
     {
-      "rule": "Activity 4 anesthesia records",
-      "result": "Nmbr_tooth empty for all 4,938"
-    },
-    {
-      "rule": "Secondary and incidental quantities: 'Pose de barre de conjonction entre N implants', 'Supplément pour avulsion de 4 troisièmes molaires' (underlying act), faces, arcades, secteurs, prosthetic elements (éléments / facettes / angles), 'Gingivectomie sur un secteur de N dents', orthèses, muscles, nerves, cm²",
-      "result": "Nmbr_tooth empty"
+      "rule": "Objets non dénombrés : faces, angles, arcades, facettes, éléments, piliers, ancrages, anastomoses, secteurs ; 'secteur de N dents ou plus' sans famille numérotée exacte → vide.",
+      "result": "Vide. Ex. 'Gingivectomie sur un secteur de N dents ou plus' → vide."
     }
   ],
   "notes": [
-    "Final artifact written to the requested Q: path, 13,443 records, 1,845,018 bytes, CP1252, no BOM, CRLF. A local copy is at work\\CCAM_V84.00_normalise.csv. Transformation scripts are in work\\ (transform.ps1, final.ps1, compare.ps1, counts.ps1); the work directory is cleaned by the controller.",
-    "Source access: no Python was available, so the workbook was read through Excel COM (values, including merged header cells) and dumped as UTF-8 to work\\raw-dump.tsv. Every subsequent step ran from that dump.",
-    "Scope note for the approver: 23 Chapter 19 modifier rows (single-letter codes such as O, U, P, Z, Y, with tariffs and no Activité/Phase) produce no records, as in the previous V84 output. If GraphTalk needs modifiers, that is a source-model change, not a normalisation defect.",
-    "emptyTariffRecords = 944 counts records where Base_tariff_in and Tariff_out_cas are both empty. In all 944 cases both are empty, so no record has only one empty tariff.",
-    "Records with 'Non pris en charge' are included with empty tariff fields, as the skill requires.",
-    "The output is byte-identical to Context\\CCAM_V84_GraphTalk_1.disabled.txt (the existing V84 output). This was verified by comparing bytes. The reference was used only as a cross-check, and the rule checks above independently justify the content.",
-    "The Q: folder contains claude-error.txt (0 bytes, created 11/3/2026 12:51). It was not touched.",
-    "No workflow state, notifications or HTML were produced."
+    "Le classeur source contient une feuille unique 'CCAM' (30 797 lignes). Lu en lecture seule via Excel COM ; le fichier source n'a pas été modifié.",
+    "Le fichier final est identique, enregistrement par enregistrement et sur les neuf champs après normalisation, à l'ancienne sortie de référence (git 1c1c92f, Context/CCAM_V84_GraphTalk_1.disabled.txt). Cette référence a servi de contrôle, pas de source ; aucun défaut de l'ancienne sortie (fuite de libellé, empilement, troncature, nombre de champs) n'a été reproduit.",
+    "Libellé source 'Avulsion de19 dents temporaires sur arcade' (HBGD282, ligne 12371) : espace manquante dans le texte source. Conservé tel quel ; Nmbr_tooth = 19 par la règle.",
+    "Les lignes de modificateurs (O, U, P… et autres codes à un caractère) ne génèrent aucun enregistrement, comme dans l'ancienne sortie.",
+    "Fichiers intermédiaires dans D:\\Users\\ddraganov\\ccam-load-gt\\work\\build : ccam-build.ps1, nmbr.ps1, finalize-and-validate.ps1, cand2.csv (UTF-8), log2.tsv, validation.json. Le dossier Q: contient toujours claude-error.txt (préexistant, vide), non modifié.",
+    "État du workflow (state/workflow.json) non modifié ; aucune notification envoyée."
   ],
   "blockingErrors": []
 }
@@ -315,10 +309,10 @@ Transformation completed successfully.
 Status: AWAITING_APPROVAL
 Candidate file: Q:\AIA_Product\01_AIA_build\Health\05. Outils\CCAM Load\V84.00\CCAM_V84.00_normalise.csv
 Review report: Q:\AIA_Product\01_AIA_build\Health\05. Outils\CCAM Load\V84.00\CCAM_V84.00_review.html
-Human review items: 2
+Human review items: 0
 Records: 13443
-=== CCAM END 2026-11-03 13:09:42 ===
+=== CCAM END 2026-11-03 13:36:32 ===
 **********************
 PowerShell transcript end
-End time: 20261103130942
+End time: 20261103133632
 **********************
