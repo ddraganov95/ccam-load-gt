@@ -636,3 +636,4 @@ This keeps the automation focused on preparing the CCAM candidate while leaving 
 - Scheduled Outlook notifications currently require that user to be logged on.
 - Claude Code must be installed/configured on the execution machine.
 - The VBS launcher currently contains machine-specific paths.
+- The unattended Claude Code transformation currently uses `--dangerously-skip-permissions` to allow file generation, validation scripts, and artifact creation without interactive approval prompts. Claude still runs with the permissions of the Windows account executing the scheduled task.
