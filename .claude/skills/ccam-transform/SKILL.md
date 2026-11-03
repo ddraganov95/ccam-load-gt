@@ -618,4 +618,10 @@ Reporting rules:
 
 The human reviews and approves the completed artifact before GraphTalk loading.
 
-Claude remains responsible for transformation correctness, deterministic corrections, and automated validation. Human approval must not be used as a substitute for checks defined in this skill.
+Human review is required only when the transformation rules and available source data do not provide enough information to determine the correct output.
+
+An unusual, unexpected, or semantically inconsistent source value is not by itself a reason for human review. If the rules defined in this skill deterministically resolve the case, Claude must apply those rules and must not request human confirmation merely because the resulting association appears unusual.
+
+In particular, cases resolved deterministically by defined structural rules, including displaced-text rules, are normal transformation cases and must not be added to the human-review list.
+
+Claude remains responsible for transformation correctness, deterministic corrections, and automated validation. Human approval must not be used as a substitute for checks or decisions that can be made deterministically using the rules defined in this skill.

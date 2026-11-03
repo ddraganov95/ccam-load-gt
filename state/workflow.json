@@ -1,13 +1,13 @@
 {
-  "status": "TRANSFORMING",
-  "detectedVersion": "V84.00",
-  "applicabilityDate": "31/07/2026",
-  "detectedAt": "2026-11-03T10:51:34.8770386Z",
+  "status": "IDLE",
+  "detectedVersion": null,
+  "applicabilityDate": null,
+  "detectedAt": null,
   "transformedAt": null,
   "artifacts": {
-    "sourceFile": "D:\\Users\\ddraganov\\ccam-load-gt\\input\\ccam-current.xls",
-    "sourceUrl": "https://www.ameli-ccam.fr/ccam/download/arborescence",
-    "sourceHash": "97BDC12B7A38609F929AD7098DE1B9B14B828D2EDDC77FDE25B3093167EDA4D5",
+    "sourceFile": null,
+    "sourceUrl": null,
+    "sourceHash": "test",
     "candidateFile": null
   },
   "review": {
