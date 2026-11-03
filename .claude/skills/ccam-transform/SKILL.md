@@ -14,7 +14,7 @@ Input: a CNAM CCAM Excel workbook.
 Output: one logical GraphTalk record per physical line, with exactly nine semicolon-separated fields:
 
 ```text
-Code;Actvty;Phase;Label;Date_str;Base_tariff_in;Tariff_out_cas;Group_code;Tail
+Code;Actvty;Phase;Label;Date_str;Base_tariff_in;Tariff_out_cas;Group_code;Nmbr_tooth
 ```
 
 Do not treat each physical Excel row as an independent output record. Reconstruct the logical hierarchy of Code, Activity, and Phase across rows.
@@ -332,20 +332,20 @@ Use the Regroupement associated with the current logical Activity/Phase record. 
 
 Do not inherit Group_code from the preceding logical Code block.
 
-### 9. Tail
+### 9. Nmbr_tooth
 
-Tail is the ninth field. It is optional, but the ninth field must always exist.
+Nmbr_tooth is the ninth field. It is optional, but the ninth field must always exist.
 
 ```text
-Empty Tail:     ...;Group_code;
-Populated Tail: ...;Group_code;29
+Empty Nmbr_tooth:     ...;Group_code;
+Populated Nmbr_tooth: ...;Group_code;29
 ```
 
-Tail is record-specific. Never inherit Tail from the main procedural activity into anesthesia or another secondary activity.
+Nmbr_tooth is record-specific. Never inherit Nmbr_tooth from the main procedural activity into anesthesia or another secondary activity.
 
-#### Tail meaning
+#### Nmbr_tooth meaning
 
-Tail represents a discrete quantity that defines the principal dental act or a validated quantity-based act family.
+Nmbr_tooth represents a discrete quantity that defines the principal dental act or a validated quantity-based act family.
 
 Do not extract every number appearing in a dental label. Determine what the number counts and whether changing that number defines a different act in the same logical family.
 
@@ -355,23 +355,23 @@ Qualifying counted objects include:
 - dental roots;
 - implants in qualifying direct dental/intrabuccal implant procedures.
 
-The word `implant` alone is insufficient. Implant Tail applies only to validated dental/intrabuccal implant families. Cranial, facial, orthopedic, and other non-intrabuccal implants must have empty Tail.
+The word `implant` alone is insufficient. Implant Nmbr_tooth applies only to validated dental/intrabuccal implant families. Cranial, facial, orthopedic, and other non-intrabuccal implants must have empty Nmbr_tooth.
 
 #### Exact quantity
 
-When a validated family uses one exact quantity greater than 1 as its discriminator, populate Tail with that integer.
+When a validated family uses one exact quantity greater than 1 as its discriminator, populate Nmbr_tooth with that integer.
 
 Examples:
 
 ```text
-Avulsion de 29 dents ...                   -> Tail 29
-Avulsion de 2 racines ...                  -> Tail 2
-Pose de 5 implants ...                     -> Tail 5
-Avulsion de 3 incisives ...                -> Tail 3
-Pose d'une prothèse ..., comportant 8 dents -> Tail 8
+Avulsion de 29 dents ...                   -> Nmbr_tooth 29
+Avulsion de 2 racines ...                  -> Nmbr_tooth 2
+Pose de 5 implants ...                     -> Nmbr_tooth 5
+Avulsion de 3 incisives ...                -> Nmbr_tooth 3
+Pose d'une prothèse ..., comportant 8 dents -> Nmbr_tooth 8
 ```
 
-An explicit Tail value of 1 does not require special semantic extraction when downstream processing treats empty Tail as 1. Do not allow singular-language interpretation to introduce false positives.
+An explicit Nmbr_tooth value of 1 does not require special semantic extraction when downstream processing treats empty Nmbr_tooth as 1. Do not allow singular-language interpretation to introduce false positives.
 
 #### Principal-act semantics
 
@@ -381,20 +381,21 @@ Examples of qualifying semantics include:
 
 - direct avulsion, placement, removal, reimplantation, treatment, or another direct procedure on N qualifying objects;
 - `Dégagement et activation de N implants`;
+- `Pose de moyen de liaison sur N implants préprothétiques intraosseux intrabuccaux` is a validated quantity-based family. Populate `Nmbr_tooth` with N for exact-quantity siblings. For an `N ou plus` sibling, use N as the lower boundary.
 - a dental prosthesis whose defining size is `comportant N dents`;
 - a quantity-based supplement whose own family is explicitly differentiated by `pose de N dents contreplaquées` or `pose de N dents contreplaquées ou massives`.
 
 #### Quantity ranges
 
-If the relevant quantity is expressed as a closed range `N à M`, Tail must be empty.
+If the relevant quantity is expressed as a closed range `N à M`, Nmbr_tooth must be empty.
 
 Examples:
 
 ```text
-1 à 3 dents    -> empty Tail
-5 à 6 dents    -> empty Tail
-8 dents à 10 dents -> empty Tail
-29 dents à 32 dents -> empty Tail
+1 à 3 dents    -> empty Nmbr_tooth
+5 à 6 dents    -> empty Nmbr_tooth
+8 dents à 10 dents -> empty Nmbr_tooth
+29 dents à 32 dents -> empty Nmbr_tooth
 ```
 
 Apply this automatically.
@@ -408,14 +409,14 @@ When a validated numbered family uses the lower boundary as its discriminator, u
 Example:
 
 ```text
-11 implants ou plus -> Tail 11
+11 implants ou plus -> Nmbr_tooth 11
 ```
 
 Do not generalize this to every threshold expression. Use the lower boundary only when sibling acts establish a quantity-based family.
 
 #### Secondary and incidental quantities
 
-Keep Tail empty when the number does not define the principal act and instead refers to:
+Keep Nmbr_tooth empty when the number does not define the principal act and instead refers to:
 
 - a secondary object or relationship;
 - implants connected by a bar;
@@ -430,28 +431,38 @@ Keep Tail empty when the number does not define the principal act and instead re
 Important negative examples:
 
 ```text
-Pose de barre de conjonction entre 2 implants intrabuccaux -> empty Tail
-Supplément pour avulsion de 4 troisièmes molaires ...      -> empty Tail
+Pose de barre de conjonction entre 2 implants intrabuccaux -> empty Nmbr_tooth
+Supplément pour avulsion de 4 troisièmes molaires ...      -> empty Nmbr_tooth
 ```
 
 The first number describes the implants connected by the bar. The second number describes the underlying avulsion referenced by the supplement. Neither quantity is the discriminator of the principal output act.
 
+`Pose de moyen de liaison sur N implants préprothétiques intraosseux intrabuccaux` is not part of the bar-connection exclusion. It is an explicit validated quantity-based family defined under Principal-act semantics.
+
+For this family, populate `Nmbr_tooth` with N. For the `N ou plus` sibling, use N as the lower boundary.
+
+`Pose de barre de conjonction entre N implants intrabuccaux` remains a separate family with empty `Nmbr_tooth`.
+
 #### Anesthesia and secondary activities
 
-Activity 4 anesthesia must always have empty Tail, regardless of any quantity appearing in the label.
+Activity 4 anesthesia must always have empty Nmbr_tooth, regardless of any quantity appearing in the label.
 
 ```text
-Pose de 7 implants ...; Activity 1 -> Tail 7
-Pose de 7 implants ...; Activity 4 -> empty Tail
+Pose de 7 implants ...; Activity 1 -> Nmbr_tooth 7
+Pose de 7 implants ...; Activity 4 -> empty Nmbr_tooth
 ```
 
-Do not copy the main activity's Tail into anesthesia.
+Do not copy the main activity's Nmbr_tooth into anesthesia.
 
-#### Tail ambiguity handling
+#### Nmbr_tooth ambiguity handling
 
-Resolve normal Tail cases by semantic family analysis. Inspect sibling acts with the same wording pattern and apply one rule consistently to the entire family.
+Resolve normal Nmbr_tooth cases by semantic family analysis. Inspect sibling acts with the same wording pattern and apply one rule consistently to the entire family.
 
-Do not produce a record-by-record discretionary review list. Only fail a family when the workbook, sibling acts, written rules, and available reference output contain a genuine unresolved contradiction.
+Explicit named-family rules in this skill take precedence over general semantic heuristics and reference-output comparison.
+
+When no explicit named-family rule applies, continue to use semantic family analysis and add genuinely ambiguous Nmbr_tooth decisions to `humanReviewItems` for human confirmation.
+
+Do not produce a record-by-record discretionary review list. Group ambiguity at the family level where possible. Human review is appropriate for genuine semantic uncertainty that remains after applying the rules above. Only FAIL a family when the workbook, sibling acts, written rules, and available reference output contain a genuine contradiction that prevents a defensible candidate value from being produced.
 
 ## Reference normalized output
 
@@ -466,7 +477,7 @@ Do not blindly reproduce defects from an older output, including:
 - broken physical records caused by embedded line breaks;
 - incorrect activity inheritance;
 - Code, Activity, Phase, or Group_code association that violates logical Code-block ownership;
-- missing Tail values that contradict the validated Tail rules.
+- missing Nmbr_tooth values that contradict the validated Nmbr_tooth rules.
 
 When the old output differs from the workbook, first determine whether the difference results from a valid logical Code-block, Activity, Phase, or label-association rule. Do not classify a Code as wrong until the stateful source parsing has been applied.
 
@@ -491,9 +502,14 @@ This normalization applies only to reference comparison. The generated artifact 
 
 Produce one logical record per physical line.
 
-- Encoding for the .csv: Windows-1252 / CP1252.
-- Encoding for text in report after finishing: UTF-8
-- Byte order mark: none.
+- Encoding for the final GraphTalk .csv only: Windows-1252 / CP1252.
+- Encoding for every non-CSV text artifact: UTF-8.
+- All intermediate TSV, TXT, JSON, log, review, and structured-output text must be written and read explicitly as UTF-8.
+- Preserve all French characters exactly in `humanReviewItems`, `deterministicDecisions`, `nmbrToothDecisions`, `validationChecks`, and `notes`.
+- Never construct report or structured-output text from a console representation decoded using an OEM or legacy Windows code page.
+- Generated PowerShell scripts must run with `pwsh`, not Windows PowerShell 5.1.
+- The Windows-1252 / CP1252 requirement applies only to the final GraphTalk .csv.
+- Byte order mark for the final GraphTalk .csv: none.
 - Line ending: Windows CRLF (`\r\n`).
 - Field separator: semicolon (`;`).
 - Header row: none unless explicitly requested.
@@ -501,12 +517,12 @@ Produce one logical record per physical line.
 - Every record must contain exactly nine fields in this order:
 
 ```text
-Code;Actvty;Phase;Label;Date_str;Base_tariff_in;Tariff_out_cas;Group_code;Tail
+Code;Actvty;Phase;Label;Date_str;Base_tariff_in;Tariff_out_cas;Group_code;Nmbr_tooth
 ```
 
-If Tail is empty, the physical line ends with `;`.
+If Nmbr_tooth is empty, the physical line ends with `;`.
 
-If Tail is present, the physical line ends with the numeric Tail value and has no additional trailing semicolon.
+If Nmbr_tooth is present, the physical line ends with the numeric Nmbr_tooth value and has no additional trailing semicolon.
 
 ## Mandatory validation loop
 
@@ -526,7 +542,7 @@ Validate all of the following:
 - Every generated record uses the `CodeValue` that opened its logical block.
 - Blank Code cells inside a block resolve to that block's `CodeValue`.
 - No record inherits or substitutes a Code from the preceding logical block.
-- Activity, Phase, tariffs, Regroupement, labels, and Tail remain associated with their source logical block and applicable child row.
+- Activity, Phase, tariffs, Regroupement, labels, and Nmbr_tooth remain associated with their source logical block and applicable child row.
 - Multiple activities repeat Code correctly.
 - Multiple phases repeat Code and Activity correctly.
 - No headings, notes, exclusions, indications, or billing text became records.
@@ -535,12 +551,12 @@ Validate all of the following:
 - Blank and `Non pris en charge` tariffs became empty fields.
 - Tariffs use comma decimal separators without unnecessary added trailing zeroes.
 - Tariffs preserve every decimal digit represented by Excel and are never capped at seven decimals.
-- Empty-Tail records end with `;`.
-- Populated-Tail records end with the Tail number and no trailing `;`.
-- Exact-quantity Tail families are populated consistently.
-- Closed `N à M` ranges have empty Tail.
-- Tail is not copied to anesthesia.
-- Secondary and incidental quantities do not become Tail.
+- Empty-Nmbr_tooth records end with `;`.
+- Populated-Nmbr_tooth records end with the Nmbr_tooth number and no trailing `;`.
+- Exact-quantity Nmbr_tooth families are populated consistently.
+- Closed `N à M` ranges have empty Nmbr_tooth.
+- Nmbr_tooth is not copied to anesthesia.
+- Secondary and incidental quantities do not become Nmbr_tooth.
 - Child labels do not leak or stack across records.
 - Multi-activity anesthesia in the same Phase is GLOBAL and uses `<main label> - anesthésie` with no Activity number or activity-specific description.
 - Multi-activity anesthesia decisions are deterministic and are not added to the human-review report.
@@ -554,7 +570,7 @@ Correct deterministic failures and rerun validation before returning the artifac
 
 ## Blocking failure definition
 
-FAIL is allowed only when a genuine source contradiction remains after applying the full hierarchy, logical Code-block reconstruction, Activity/Phase association, label construction, tariff handling, Tail rules, and semantic family analysis, and automated validation.
+FAIL is allowed only when a genuine source contradiction remains after applying the full hierarchy, logical Code-block reconstruction, Activity/Phase association, label construction, tariff handling, Nmbr_tooth rules, and semantic family analysis, and automated validation.
 
 A blocking failure must identify:
 

@@ -1,11 +1,20 @@
 param(
     [Alias("v")]
     [switch]$Validate,
+
     [switch]$Test
 )
+$LogFile = Join-Path $PSScriptRoot "task.log"
+Start-Transcript -Path $LogFile -Force
+
+Write-Host "=== CCAM START $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ==="
 
 $ErrorActionPreference = "Stop"
+$Utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 
+$OutputEncoding = $Utf8NoBom
+[Console]::InputEncoding = $Utf8NoBom
+[Console]::OutputEncoding = $Utf8NoBom
 $Config = $null
 $State = $null
 $ProjectRoot = $PSScriptRoot
@@ -35,8 +44,10 @@ function Send-CcamFailureEmail {
     try {
         $Outlook = New-Object -ComObject Outlook.Application
         $Mail = $Outlook.CreateItem(0)
+
         $Mail.To = $Recipient
         $Mail.Subject = "CCAM automation failed on $env:COMPUTERNAME"
+
         $Mail.Body = @"
 The CCAM automation requires attention.
 
@@ -61,7 +72,9 @@ $((Get-Date).ToString("yyyy-MM-dd HH:mm:ss"))
 Script:
 $PSCommandPath
 "@
+
         $Mail.Send()
+
         Write-Host ""
         Write-Host "Failure notification submitted to Outlook for $Recipient"
     }
@@ -71,13 +84,260 @@ $PSCommandPath
     }
     finally {
         if ($null -ne $Mail) {
+            [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject(
+                $Mail
+            )
+        }
+
+        if ($null -ne $Outlook) {
+            [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject(
+                $Outlook
+            )
+        }
+
+        [GC]::Collect()
+        [GC]::WaitForPendingFinalizers()
+    }
+}
+
+function Send-CcamReviewEmail {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Recipient,
+
+        [Parameter(Mandatory)]
+        [string]$Version,
+
+        [Parameter(Mandatory)]
+        [string]$ApplicabilityDate,
+
+        [Parameter(Mandatory)]
+        [string]$ReportPath
+    )
+
+    $Outlook = $null
+    $Mail = $null
+
+    try {
+        $Outlook = New-Object -ComObject Outlook.Application
+        $Mail = $Outlook.CreateItem(0)
+
+        $Mail.To = $Recipient
+        $Mail.Subject = "CCAM $Version ready for review"
+
+        $Mail.Body = @"
+CCAM $Version is ready for review.
+
+Applicable date:
+$ApplicabilityDate
+
+Review report:
+$ReportPath
+
+Open the review report to review the generated GraphTalk candidate.
+"@
+
+        $Mail.Send()
+
+        Write-Host ""
+        Write-Host "Review notification submitted to Outlook for $Recipient"
+    }
+    finally {
+        if ($null -ne $Mail) {
             [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($Mail)
         }
+
         if ($null -ne $Outlook) {
             [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($Outlook)
         }
-        [GC]::Collect()
-        [GC]::WaitForPendingFinalizers()
+
+[GC]::Collect()
+[GC]::WaitForPendingFinalizers()
+    }
+}
+
+function Get-CcamWorkbookMetadata {
+    param(
+        [Parameter(Mandatory)]
+        [string]$ExcelPath,
+
+        [Parameter(Mandatory)]
+        [string]$WorksheetName,
+
+        [Parameter(Mandatory)]
+        [string]$VersionCell
+    )
+
+    if (-not (Test-Path -LiteralPath $ExcelPath)) {
+        throw "CCAM workbook not found: $ExcelPath"
+    }
+
+    $Excel = $null
+    $Workbook = $null
+    $Worksheet = $null
+    $VersionRange = $null
+
+    try {
+        $Excel = New-Object -ComObject Excel.Application
+        $Excel.Visible = $false
+        $Excel.DisplayAlerts = $false
+
+        $Workbook = $Excel.Workbooks.Open(
+            $ExcelPath,
+            0,
+            $true
+        )
+
+        $Worksheet = $Workbook.Worksheets.Item(
+            $WorksheetName
+        )
+
+        $VersionRange = $Worksheet.Range(
+            $VersionCell
+        )
+
+        $VersionHeader = [string]$VersionRange.Text
+
+        if ([string]::IsNullOrWhiteSpace($VersionHeader)) {
+            throw "CCAM version cell $WorksheetName!$VersionCell is empty."
+        }
+
+        $NormalizedHeader = (
+            $VersionHeader -replace '\s+', ' '
+        ).Trim()
+
+        if (
+            $NormalizedHeader -match
+            'CCAM\s+version\s+(\d+(?:[.,]\d+)?)\s+applicable\s+(\d{2}/\d{2}/\d{4})'
+        ) {
+            $RawVersion = $Matches[1].Replace(",", ".")
+            $ApplicabilityDate = $Matches[2]
+
+            if ($RawVersion -match '^\d+$') {
+                $DetectedVersion = "V$RawVersion.00"
+            }
+            else {
+                $DetectedVersion = "V$RawVersion"
+            }
+
+            return [pscustomobject]@{
+                version           = $DetectedVersion
+                applicabilityDate = $ApplicabilityDate
+                header            = $NormalizedHeader
+            }
+        }
+
+        Write-Warning "CCAM metadata format was not recognized. Falling back to Claude."
+
+        $MetadataSchemaPath = Join-Path `
+            $ProjectRoot `
+            "schemas\ccam-metadata-response.schema.json"
+
+        if (-not (Test-Path -LiteralPath $MetadataSchemaPath)) {
+            throw "CCAM metadata response schema not found: $MetadataSchemaPath"
+        }
+
+        $MetadataSchema = Get-Content `
+            -LiteralPath $MetadataSchemaPath `
+            -Raw |
+            ConvertFrom-Json |
+            ConvertTo-Json `
+                -Depth 10 `
+                -Compress
+        $MetadataSchemaArgument = $MetadataSchema.Replace('"', '\"')
+        $MetadataPrompt = @"
+Extract the CCAM version and applicability date from this text:
+
+$NormalizedHeader
+
+Return:
+- version in the format V84.00
+- applicabilityDate in the format dd/MM/yyyy
+"@
+
+        $ClaudeRawResult = $MetadataPrompt |
+            & claude `
+                -p `
+                --output-format json `
+                --json-schema $MetadataSchemaArgument
+
+        if ($LASTEXITCODE -ne 0) {
+            throw "Claude metadata extraction failed with exit code $LASTEXITCODE."
+        }
+
+        try {
+            $ClaudeResponse = $ClaudeRawResult |
+                ConvertFrom-Json
+        }
+        catch {
+            throw "Claude returned invalid metadata JSON: $($_.Exception.Message)"
+        }
+
+        if ($ClaudeResponse.is_error -eq $true) {
+            throw "Claude returned a metadata extraction error."
+        }
+
+        if ($null -eq $ClaudeResponse.structured_output) {
+            throw "Claude did not return structured CCAM metadata."
+        }
+
+        $Metadata = $ClaudeResponse.structured_output
+
+        if (
+            [string]::IsNullOrWhiteSpace(
+                [string]$Metadata.version
+            )
+        ) {
+            throw "Claude metadata response did not contain a version."
+        }
+
+        if (
+            [string]::IsNullOrWhiteSpace(
+                [string]$Metadata.applicabilityDate
+            )
+        ) {
+            throw "Claude metadata response did not contain an applicability date."
+        }
+
+        return [pscustomobject]@{
+            version           = [string]$Metadata.version
+            applicabilityDate = [string]$Metadata.applicabilityDate
+            header            = $NormalizedHeader
+        }
+    }
+    finally {
+        if ($null -ne $Workbook) {
+            $Workbook.Close($false)
+        }
+
+        if ($null -ne $VersionRange) {
+            [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject(
+                $VersionRange
+            )
+        }
+
+        if ($null -ne $Worksheet) {
+            [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject(
+                $Worksheet
+            )
+        }
+
+        if ($null -ne $Workbook) {
+            [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject(
+                $Workbook
+            )
+        }
+
+        if ($null -ne $Excel) {
+            $Excel.Quit()
+
+            [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject(
+                $Excel
+            )
+        }
+
+[GC]::Collect()
+[GC]::WaitForPendingFinalizers()
     }
 }
 
@@ -88,37 +348,56 @@ try {
 
     Set-Location -LiteralPath $ProjectRoot
 
-    $ConfigPath = Join-Path $ProjectRoot "config.json"
+    $ConfigPath = Join-Path `
+        $ProjectRoot `
+        "config.json"
 
-if (-not (Test-Path -LiteralPath $ConfigPath)) {
-    throw "Configuration file not found: $ConfigPath"
-}
+    if (-not (Test-Path -LiteralPath $ConfigPath)) {
+        throw "Configuration file not found: $ConfigPath"
+    }
 
-try {
-    $Config = Get-Content -LiteralPath $ConfigPath -Raw |
-        ConvertFrom-Json
-}
-catch {
-    throw "config.json contains invalid JSON: $($_.Exception.Message)"
-}
+    try {
+        $Config = Get-Content `
+            -LiteralPath $ConfigPath `
+            -Raw |
+            ConvertFrom-Json
+    }
+    catch {
+        throw "config.json contains invalid JSON: $($_.Exception.Message)"
+    }
 
-$StatePath = Join-Path $ProjectRoot $Config.paths.state
-$TransformSchemaPath = Join-Path $ProjectRoot $Config.paths.transformSchema
-$TransformSkillPath = Join-Path $ProjectRoot $Config.paths.transformSkill
-$ReviewReportScriptPath = Join-Path $ProjectRoot $Config.paths.reviewReportScript
+    $StatePath = Join-Path `
+        $ProjectRoot `
+        $Config.paths.state
+
+    $TransformSchemaPath = Join-Path `
+        $ProjectRoot `
+        $Config.paths.transformSchema
+
+    $TransformSkillPath = Join-Path `
+        $ProjectRoot `
+        $Config.paths.transformSkill
+
+    $ReviewReportScriptPath = Join-Path `
+        $ProjectRoot `
+        $Config.paths.reviewReportScript
 
     Write-Host "CCAM Automation"
     Write-Host "Project root: $ProjectRoot"
     Write-Host "Working directory: $((Get-Location).Path)"
+
     if (-not (Test-Path -LiteralPath $StatePath)) {
         throw "Workflow state file not found: $StatePath"
     }
+
     if (-not (Test-Path -LiteralPath $TransformSkillPath)) {
         throw "CCAM transformation skill not found: $TransformSkillPath"
     }
+
     if (-not (Test-Path -LiteralPath $ReviewReportScriptPath)) {
-    throw "Review report generator not found: $ReviewReportScriptPath"
+        throw "Review report generator not found: $ReviewReportScriptPath"
     }
+
     if (-not (Test-Path -LiteralPath $TransformSchemaPath)) {
         throw "Transformation response schema not found: $TransformSchemaPath"
     }
@@ -126,7 +405,10 @@ $ReviewReportScriptPath = Join-Path $ProjectRoot $Config.paths.reviewReportScrip
     Write-Host "Transformation skill found: $TransformSkillPath"
 
     try {
-        $State = Get-Content -LiteralPath $StatePath -Raw | ConvertFrom-Json
+        $State = Get-Content `
+            -LiteralPath $StatePath `
+            -Raw |
+            ConvertFrom-Json
     }
     catch {
         throw "Workflow state file contains invalid JSON: $($_.Exception.Message)"
@@ -135,23 +417,58 @@ $ReviewReportScriptPath = Join-Path $ProjectRoot $Config.paths.reviewReportScrip
     if ($null -eq $Config.connector) {
         throw "The connector section is missing from config.json."
     }
-    if ([string]::IsNullOrWhiteSpace([string]$Config.connector.technicalContact)) {
+
+    if (
+        [string]::IsNullOrWhiteSpace(
+            [string]$Config.connector.technicalContact
+        )
+    ) {
         throw "connector.technicalContact is missing from config.json."
     }
-    if ([string]::IsNullOrWhiteSpace([string]$Config.connector.reviewer)) {
+
+    if (
+        [string]::IsNullOrWhiteSpace(
+            [string]$Config.connector.reviewer
+        )
+    ) {
         throw "connector.reviewer is missing from config.json."
     }
-    if ([string]::IsNullOrWhiteSpace([string]$Config.source.ccamPageUrl)) {
-        throw "source.ccamPageUrl is missing from config.json."
+
+    if ($null -eq $Config.source) {
+        throw "The source section is missing from config.json."
+    }
+
+    if (
+        [string]::IsNullOrWhiteSpace(
+            [string]$Config.source.ccamExcelUrl
+        )
+    ) {
+        throw "source.ccamExcelUrl is missing from config.json."
+    }
+
+    if (
+        [string]::IsNullOrWhiteSpace(
+            [string]$Config.source.versionSheet
+        )
+    ) {
+        throw "source.versionSheet is missing from config.json."
+    }
+
+    if (
+        [string]::IsNullOrWhiteSpace(
+            [string]$Config.source.versionCell
+        )
+    ) {
+        throw "source.versionCell is missing from config.json."
     }
 
     Write-Host ""
     Write-Host "Configuration loaded successfully."
-    Write-Host "CCAM URL: $($Config.source.ccamPageUrl)"
+    Write-Host "CCAM Excel URL: $($Config.source.ccamExcelUrl)"
+    Write-Host "Version location: $($Config.source.versionSheet)!$($Config.source.versionCell)"
     Write-Host ""
     Write-Host "Workflow state loaded successfully."
     Write-Host "Status: $($State.status)"
-    Write-Host "Processed version: $($State.processedVersion)"
     Write-Host "Detected version: $($State.detectedVersion)"
 
     if ($Validate) {
@@ -159,10 +476,14 @@ $ReviewReportScriptPath = Join-Path $ProjectRoot $Config.paths.reviewReportScrip
         Write-Host "Validation mode enabled."
         Write-Host "Checking Claude CLI and project skill visibility..."
 
-        $ClaudeCommand = Get-Command claude -ErrorAction SilentlyContinue
+        $ClaudeCommand = Get-Command `
+            claude `
+            -ErrorAction SilentlyContinue
+
         if ($null -eq $ClaudeCommand) {
             throw "Claude CLI was not found in PATH."
         }
+
         Write-Host "Claude CLI found: $($ClaudeCommand.Source)"
 
         $SkillVisibilityPrompt = @"
@@ -182,27 +503,54 @@ If the file cannot be read, return exactly:
 SKILL_NOT_FOUND
 "@
 
-        $SkillVisibilityResult = $SkillVisibilityPrompt | & claude -p --output-format text
+        $SkillVisibilityResult = $SkillVisibilityPrompt |
+            & claude `
+                -p `
+                --output-format text
+
         if ($LASTEXITCODE -ne 0) {
             throw "Claude visibility test failed with exit code $LASTEXITCODE."
         }
-        $SkillVisibilityResult = $SkillVisibilityResult.Trim()
+
+        $SkillVisibilityResult = (
+            $SkillVisibilityResult |
+            Out-String
+        ).Trim()
+
         Write-Host "Claude skill visibility result: $SkillVisibilityResult"
+
         if ($SkillVisibilityResult -ne "SKILL_FOUND") {
             throw "Claude could not confirm access to the project transformation skill."
         }
 
         Write-Host "Checking transformation response schema..."
+
         try {
-            $null = Get-Content -LiteralPath $TransformSchemaPath -Raw | ConvertFrom-Json
+            $null = Get-Content `
+                -LiteralPath $TransformSchemaPath `
+                -Raw |
+                ConvertFrom-Json
         }
         catch {
             throw "Transformation response schema contains invalid JSON: $($_.Exception.Message)"
         }
+        Write-Host "Checking Outlook review notification..."
 
+        $ValidationReportPath = Join-Path `
+            $ProjectRoot `
+            "VALIDATION_ONLY_NO_REPORT.html"
+
+        Send-CcamReviewEmail `
+            -Recipient $Config.connector.reviewer `
+            -Version "VALIDATION" `
+            -ApplicabilityDate "N/A" `
+            -ReportPath $ValidationReportPath
+
+        Write-Host "Outlook review notification test completed."
         Write-Host "Transformation response schema is valid."
         Write-Host ""
         Write-Host "Validation completed successfully."
+
         exit 0
     }
 
@@ -219,38 +567,46 @@ SKILL_NOT_FOUND
             throw "Source Excel file not found: $SourceExcelPath"
         }
 
-        $ReviewDirectory = Join-Path `
-    $ProjectRoot `
-    $Config.paths.reviewDirectory
+$ReviewDirectory = [string]$Config.paths.reviewDirectory
 
-$SafeVersion = $Version -replace '[^A-Za-z0-9._-]', '_'
-
-$ReviewVersionDirectory = Join-Path `
-    $ReviewDirectory `
-    $SafeVersion
-
-if (-not (Test-Path -LiteralPath $ReviewVersionDirectory)) {
-    New-Item `
-        -ItemType Directory `
-        -Path $ReviewVersionDirectory `
-        -Force |
-        Out-Null
+if (-not [System.IO.Path]::IsPathRooted($ReviewDirectory)) {
+    $ReviewDirectory = Join-Path `
+        $ProjectRoot `
+        $ReviewDirectory
 }
 
-$OutputPath = Join-Path `
-    $ReviewVersionDirectory `
-    "CCAM_${SafeVersion}_normalise.csv"
+        $SafeVersion = $Version -replace '[^A-Za-z0-9._-]', '_'
+
+        $ReviewVersionDirectory = Join-Path `
+            $ReviewDirectory `
+            $SafeVersion
+
+        if (-not (Test-Path -LiteralPath $ReviewVersionDirectory)) {
+            New-Item `
+                -ItemType Directory `
+                -Path $ReviewVersionDirectory `
+                -Force |
+                Out-Null
+        }
+
+        $OutputPath = Join-Path `
+            $ReviewVersionDirectory `
+            "CCAM_${SafeVersion}_normalise.csv"
 
         try {
-            $Schema = Get-Content -LiteralPath $TransformSchemaPath -Raw |
+            $Schema = Get-Content `
+                -LiteralPath $TransformSchemaPath `
+                -Raw |
                 ConvertFrom-Json |
-                ConvertTo-Json -Depth 20 -Compress
+                ConvertTo-Json `
+                    -Depth 20 `
+                    -Compress
         }
         catch {
             throw "Unable to load transformation schema: $($_.Exception.Message)"
         }
 
-        $Prompt = @"
+       $Prompt = @"
 Use the ccam-transform skill available in this project.
 
 Source Excel:
@@ -272,86 +628,87 @@ Return the complete structured transformation report required by the skill and t
         Write-Host "Source: $SourceExcelPath"
         Write-Host "Output: $OutputPath"
 
-       $ClaudeErrorPath = Join-Path `
-    $ReviewVersionDirectory `
-    "claude-error.txt"
+        $ClaudeErrorPath = Join-Path `
+            $ReviewVersionDirectory `
+            "claude-error.txt"
 
-Remove-Item `
-    -LiteralPath $ClaudeErrorPath `
-    -Force `
-    -ErrorAction SilentlyContinue
-
-$ClaudeRawResult = $Prompt |
-    & claude `
-        -p `
-        --dangerously-skip-permissions `
-        --output-format json `
-        --json-schema $Schema `
-        2> $ClaudeErrorPath
-
-$ClaudeExitCode = $LASTEXITCODE
-
-if ($ClaudeExitCode -ne 0) {
-    $ClaudeError = ""
-
-    if (Test-Path -LiteralPath $ClaudeErrorPath) {
-        $ClaudeErrorContent = Get-Content `
+        Remove-Item `
             -LiteralPath $ClaudeErrorPath `
-            -Raw
+            -Force `
+            -ErrorAction SilentlyContinue
 
-        if ($null -ne $ClaudeErrorContent) {
-            $ClaudeError = $ClaudeErrorContent.Trim()
-        }
-    }
+        $ClaudeRawResult = $Prompt |
+            & claude `
+                -p `
+                --dangerously-skip-permissions `
+                --output-format json `
+                --json-schema $Schema `
+                2> $ClaudeErrorPath
 
-    $ClaudeStdout = ""
+        $ClaudeExitCode = $LASTEXITCODE
 
-    if ($null -ne $ClaudeRawResult) {
-        $ClaudeStdout = (
-            $ClaudeRawResult |
-            Out-String
-        ).Trim()
-    }
+        if ($ClaudeExitCode -ne 0) {
+            $ClaudeError = ""
 
-    # Try to extract Claude's useful error from its JSON envelope.
-    $ClaudeSummary = $null
+            if (Test-Path -LiteralPath $ClaudeErrorPath) {
+                $ClaudeErrorContent = Get-Content `
+                    -LiteralPath $ClaudeErrorPath `
+                    -Raw
 
-    if (-not [string]::IsNullOrWhiteSpace($ClaudeStdout)) {
-        try {
-            $ClaudeFailureResponse = $ClaudeStdout |
-                ConvertFrom-Json
-
-            if (-not [string]::IsNullOrWhiteSpace(
-                [string]$ClaudeFailureResponse.result
-            )) {
-                $ClaudeSummary =
-                    [string]$ClaudeFailureResponse.result
+                if ($null -ne $ClaudeErrorContent) {
+                    $ClaudeError = $ClaudeErrorContent.Trim()
+                }
             }
-            elseif (-not [string]::IsNullOrWhiteSpace(
-                [string]$ClaudeFailureResponse.api_error
-            )) {
-                $ClaudeSummary =
-                    [string]$ClaudeFailureResponse.api_error
+
+            $ClaudeStdout = ""
+
+            if ($null -ne $ClaudeRawResult) {
+                $ClaudeStdout = (
+                    $ClaudeRawResult |
+                    Out-String
+                ).Trim()
             }
-        }
-        catch {
-            # Keep the raw stdout fallback below.
-        }
-    }
 
-    if ([string]::IsNullOrWhiteSpace($ClaudeSummary)) {
-        if (-not [string]::IsNullOrWhiteSpace($ClaudeError)) {
-            $ClaudeSummary = $ClaudeError
-        }
-        elseif (-not [string]::IsNullOrWhiteSpace($ClaudeStdout)) {
-            $ClaudeSummary = $ClaudeStdout
-        }
-        else {
-            $ClaudeSummary = "Claude returned no error details."
-        }
-    }
+            $ClaudeSummary = $null
 
-    throw @"
+            if (-not [string]::IsNullOrWhiteSpace($ClaudeStdout)) {
+                try {
+                    $ClaudeFailureResponse = $ClaudeStdout |
+                        ConvertFrom-Json
+
+                    if (
+                        -not [string]::IsNullOrWhiteSpace(
+                            [string]$ClaudeFailureResponse.result
+                        )
+                    ) {
+                        $ClaudeSummary = [string]$ClaudeFailureResponse.result
+                    }
+                    elseif (
+                        -not [string]::IsNullOrWhiteSpace(
+                            [string]$ClaudeFailureResponse.api_error
+                        )
+                    ) {
+                        $ClaudeSummary = [string]$ClaudeFailureResponse.api_error
+                    }
+                }
+                catch {
+                    # Use the raw stdout fallback below.
+                }
+            }
+
+            if ([string]::IsNullOrWhiteSpace($ClaudeSummary)) {
+                if (-not [string]::IsNullOrWhiteSpace($ClaudeError)) {
+                    $ClaudeSummary = $ClaudeError
+                }
+                elseif (-not [string]::IsNullOrWhiteSpace($ClaudeStdout)) {
+                    $ClaudeSummary = $ClaudeStdout
+                }
+                else {
+                    $ClaudeSummary = "Claude returned no error details."
+                }
+            }
+
+            throw @"
 Claude transformation failed.
 
 Exit code:
@@ -360,30 +717,31 @@ $ClaudeExitCode
 Claude error:
 $ClaudeSummary
 "@
-}
+        }
 
-Remove-Item `
-    -LiteralPath $ClaudeErrorPath `
-    -Force `
-    -ErrorAction SilentlyContinue
+        Remove-Item `
+            -LiteralPath $ClaudeErrorPath `
+            -Force `
+            -ErrorAction SilentlyContinue
 
-try {
-    $ClaudeResponse = $ClaudeRawResult |
-        ConvertFrom-Json
-}
-catch {
-    throw "Claude returned invalid JSON: $($_.Exception.Message)"
-}
+        try {
+            $ClaudeResponse = $ClaudeRawResult |
+                ConvertFrom-Json
+        }
+        catch {
+            throw "Claude returned invalid JSON: $($_.Exception.Message)"
+        }
 
-if ($ClaudeResponse.is_error -eq $true) {
-    throw "Claude returned a transformation error."
-}
+        if ($ClaudeResponse.is_error -eq $true) {
+            throw "Claude returned a transformation error."
+        }
 
-if ($null -eq $ClaudeResponse.structured_output) {
-    throw "Claude did not return structured transformation output."
-}
+        if ($null -eq $ClaudeResponse.structured_output) {
+            throw "Claude did not return structured transformation output."
+        }
 
         $Result = $ClaudeResponse.structured_output
+
         Write-Host ""
         Write-Host "Claude structured result:"
         Write-Host ($Result | ConvertTo-Json -Depth 20)
@@ -395,211 +753,95 @@ if ($null -eq $ClaudeResponse.structured_output) {
         return $Result
     }
 
- if ($State.status -eq "AWAITING_APPROVAL") {
-    Write-Host ""
-    Write-Warning "CCAM version $($State.detectedVersion) is awaiting approval."
+    if ($State.status -eq "AWAITING_APPROVAL") {
+        Write-Host ""
+        Write-Warning "CCAM version $($State.detectedVersion) is awaiting approval."
 
-    if ($null -ne $State.artifacts.candidateFile) {
-        Write-Host "Candidate file: $($State.artifacts.candidateFile)"
+        if ($null -ne $State.artifacts.candidateFile) {
+            Write-Host "Candidate file: $($State.artifacts.candidateFile)"
+        }
+
+        if ($null -ne $State.review.reportFile) {
+            Write-Host "Review report: $($State.review.reportFile)"
+        }
+
+        Write-Host "The daily CCAM source check will continue."
     }
 
-    if ($null -ne $State.review.reportFile) {
-        Write-Host "Review report: $($State.review.reportFile)"
-    }
+    $InputDirectory = Join-Path `
+        $ProjectRoot `
+        $Config.paths.inputDirectory
 
-    Write-Host "The daily CCAM page check will continue."
-}
-
-    $InputDirectory = Join-Path $ProjectRoot $Config.paths.inputDirectory
     if (-not (Test-Path -LiteralPath $InputDirectory)) {
-        New-Item -ItemType Directory -Path $InputDirectory | Out-Null
+        New-Item `
+            -ItemType Directory `
+            -Path $InputDirectory `
+            -Force |
+            Out-Null
     }
 
     if ($Test) {
         Write-Host ""
         Write-Warning "TEST MODE ENABLED"
-        Write-Host "Ameli page check and download will be bypassed."
+        Write-Host "CCAM download will be bypassed."
 
         if ($null -eq $Config.test) {
             throw "The test section is missing from config.json."
         }
 
-        $DetectedVersion = [string]$Config.test.version
-        if ([string]::IsNullOrWhiteSpace($DetectedVersion)) {
-            throw "test.version is missing from config.json."
-        }
-        if ([string]::IsNullOrWhiteSpace([string]$Config.test.excelFile)) {
+        if (
+            [string]::IsNullOrWhiteSpace(
+                [string]$Config.test.excelFile
+            )
+        ) {
             throw "test.excelFile is missing from config.json."
         }
 
-        $ExcelPath = Join-Path $ProjectRoot ([string]$Config.test.excelFile)
+        $ExcelPath = Join-Path `
+            $ProjectRoot `
+            $Config.test.excelFile
+
         if (-not (Test-Path -LiteralPath $ExcelPath)) {
             throw "Test Excel file not found: $ExcelPath"
         }
 
-        $ExcelHash = (Get-FileHash -LiteralPath $ExcelPath -Algorithm SHA256).Hash
-        $CurrentHash = "TEST-$DetectedVersion"
-        $ExcelDownloadUrl = "LOCAL_TEST_FILE"
+        $WorkbookMetadata = Get-CcamWorkbookMetadata `
+            -ExcelPath $ExcelPath `
+            -WorksheetName $Config.source.versionSheet `
+            -VersionCell $Config.source.versionCell
+
+        $DetectedVersion = [string]$WorkbookMetadata.version
+        $ApplicabilityDate = [string]$WorkbookMetadata.applicabilityDate
+
+        $ExcelHash = (
+            Get-FileHash `
+                -LiteralPath $ExcelPath `
+                -Algorithm SHA256
+        ).Hash
+
+        $ExcelSourceUrl = "LOCAL_TEST_FILE"
 
         Write-Host "Test CCAM version: $DetectedVersion"
+        Write-Host "Applicable date: $ApplicabilityDate"
         Write-Host "Test Excel: $ExcelPath"
         Write-Host "Excel SHA-256: $ExcelHash"
     }
     else {
         Write-Host ""
-        Write-Host "Downloading CCAM page..."
+        Write-Host "Downloading current CCAM Excel..."
 
-        $PagePath = Join-Path $InputDirectory "ccam-current.html"
-        $CurlErrorPath = Join-Path $InputDirectory "ccam-curl-error.txt"
-        Remove-Item -LiteralPath $CurlErrorPath -Force -ErrorAction SilentlyContinue
+        $ExcelPath = Join-Path `
+            $InputDirectory `
+            "ccam-current.xls"
 
-        & curl.exe `
-            -f `
-            -sS `
-            -L `
-            --connect-timeout 10 `
-            --max-time 30 `
-            --retry 2 `
-            --retry-delay 2 `
-            $Config.source.ccamPageUrl `
-            -o $PagePath `
-            2> $CurlErrorPath
+        $CurlErrorPath = Join-Path `
+            $InputDirectory `
+            "ccam-curl-error.txt"
 
-        $CurlExitCode = $LASTEXITCODE
-        if ($CurlExitCode -ne 0) {
-            $CurlError = ""
-            if (Test-Path -LiteralPath $CurlErrorPath) {
-                $CurlError = (Get-Content -LiteralPath $CurlErrorPath -Raw).Trim()
-            }
-            if ([string]::IsNullOrWhiteSpace($CurlError)) {
-                $CurlError = "curl returned no additional error information."
-            }
-            throw "Failed to download CCAM page. curl exit code: $CurlExitCode. Details: $CurlError"
-        }
-
-        Remove-Item -LiteralPath $CurlErrorPath -Force -ErrorAction SilentlyContinue
-
-        if (-not (Test-Path -LiteralPath $PagePath)) {
-            throw "CCAM page was not created."
-        }
-
-        $PageContent = Get-Content -LiteralPath $PagePath -Raw
-        if ($PageContent -notmatch 'CCAM') {
-            throw "Downloaded page does not appear to be a CCAM page."
-        }
-        if ($PageContent -notmatch 'Version actuelle') {
-            throw "Downloaded page does not contain the expected CCAM current-version section."
-        }
-
-        Write-Host "CCAM page downloaded successfully."
-        Write-Host "Saved to: $PagePath"
-        Write-Host ""
-        Write-Host "Calculating page hash..."
-
-        $CurrentHash = (Get-FileHash -LiteralPath $PagePath -Algorithm SHA256).Hash
-        Write-Host "Current page hash: $CurrentHash"
-        Write-Host "Previous page hash: $($State.pageHash)"
-
-        if ($null -eq $State.pageHash) {
-            Write-Host ""
-            Write-Host "No previous page hash exists."
-            Write-Host "Initial CCAM analysis is required."
-        }
-        elseif ($CurrentHash -ne $State.pageHash) {
-            Write-Host ""
-            Write-Host "CCAM page has changed."
-        }
-        else {
-            Write-Host ""
-            Write-Host "CCAM page has not changed."
-            exit 0
-        }
-
-        Write-Host "AI analysis is required."
-        Write-Host "Calling Claude..."
-
-        $Prompt = @"
-Read the file at:
-
-$PagePath
-
-This file contains the official CCAM download page.
-
-Identify:
-1. The full CURRENT CCAM version from the current-version section.
-2. The Excel (.xls or .xlsx) download link belonging to that version.
-
-Use the complete version stated in the current-version description,
-for example V84.00, not a shortened download label such as V84.
-
-Do not use a historical CCAM release.
-"@
-
-        $SchemaPath = Join-Path $ProjectRoot "schemas\ccam-source-response.schema.json"
-        if (-not (Test-Path -LiteralPath $SchemaPath)) {
-            throw "Claude response schema not found: $SchemaPath"
-        }
-
-        try {
-            $Schema = Get-Content -LiteralPath $SchemaPath -Raw |
-                ConvertFrom-Json |
-                ConvertTo-Json -Depth 20 -Compress
-        }
-        catch {
-            throw "Unable to load CCAM source response schema: $($_.Exception.Message)"
-        }
-
-        $ClaudeRawResult = $Prompt |
-            & claude `
-                -p `
-                --output-format json `
-                --json-schema $Schema
-
-        if ($LASTEXITCODE -ne 0) {
-            throw "Claude invocation failed with exit code $LASTEXITCODE."
-        }
-
-        try {
-            $ClaudeResponse = $ClaudeRawResult | ConvertFrom-Json
-        }
-        catch {
-            throw "Claude returned invalid JSON: $($_.Exception.Message)"
-        }
-
-        if ($ClaudeResponse.is_error -eq $true) {
-            throw "Claude returned an error."
-        }
-        if ($null -eq $ClaudeResponse.structured_output) {
-            throw "Claude did not return structured output."
-        }
-
-        $DetectedVersion = [string]$ClaudeResponse.structured_output.version
-        $ExcelUrl = [string]$ClaudeResponse.structured_output.excelUrl
-
-        if ([string]::IsNullOrWhiteSpace($DetectedVersion)) {
-            throw "Claude did not return the current CCAM version."
-        }
-        if ([string]::IsNullOrWhiteSpace($ExcelUrl)) {
-            throw "Claude did not return the CCAM Excel URL."
-        }
-
-        Write-Host ""
-        Write-Host "Validated Claude response."
-        Write-Host "CCAM version: $DetectedVersion"
-        Write-Host "Excel URL: $ExcelUrl"
-
-        $BaseUri = [Uri]$Config.source.ccamPageUrl
-        $ExcelDownloadUrl = [Uri]::new($BaseUri, $ExcelUrl).AbsoluteUri
-        Write-Host ""
-        Write-Host "Excel download URL: $ExcelDownloadUrl"
-
-        $ExcelFileName = [System.IO.Path]::GetFileName(([Uri]$ExcelDownloadUrl).AbsolutePath)
-        if ([string]::IsNullOrWhiteSpace($ExcelFileName)) {
-            throw "Unable to determine the Excel filename from URL: $ExcelDownloadUrl"
-        }
-
-        $ExcelPath = Join-Path $InputDirectory $ExcelFileName
-        Write-Host "Downloading CCAM Excel file..."
+        Remove-Item `
+            -LiteralPath $CurlErrorPath `
+            -Force `
+            -ErrorAction SilentlyContinue
 
         & curl.exe `
             -f `
@@ -609,41 +851,120 @@ Do not use a historical CCAM release.
             --max-time 120 `
             --retry 2 `
             --retry-delay 2 `
-            $ExcelDownloadUrl `
-            -o $ExcelPath
+            $Config.source.ccamExcelUrl `
+            -o $ExcelPath `
+            2> $CurlErrorPath
 
-        $ExcelCurlExitCode = $LASTEXITCODE
-        if ($ExcelCurlExitCode -ne 0) {
-            throw "Failed to download CCAM Excel file. curl exit code: $ExcelCurlExitCode."
+        $CurlExitCode = $LASTEXITCODE
+
+        if ($CurlExitCode -ne 0) {
+            $CurlError = ""
+
+            if (Test-Path -LiteralPath $CurlErrorPath) {
+                $CurlErrorContent = Get-Content `
+                    -LiteralPath $CurlErrorPath `
+                    -Raw
+
+                if ($null -ne $CurlErrorContent) {
+                    $CurlError = $CurlErrorContent.Trim()
+                }
+            }
+
+            if ([string]::IsNullOrWhiteSpace($CurlError)) {
+                $CurlError = "curl returned no additional error information."
+            }
+
+            throw "Failed to download CCAM Excel. curl exit code: $CurlExitCode. Details: $CurlError"
         }
+
+        Remove-Item `
+            -LiteralPath $CurlErrorPath `
+            -Force `
+            -ErrorAction SilentlyContinue
+
         if (-not (Test-Path -LiteralPath $ExcelPath)) {
             throw "CCAM Excel file was not created."
         }
 
         Write-Host "CCAM Excel downloaded successfully."
         Write-Host "Saved to: $ExcelPath"
-        $ExcelHash = (Get-FileHash -LiteralPath $ExcelPath -Algorithm SHA256).Hash
+        Write-Host ""
+        Write-Host "Calculating Excel hash..."
+
+        $ExcelHash = (
+            Get-FileHash `
+                -LiteralPath $ExcelPath `
+                -Algorithm SHA256
+        ).Hash
+
+        Write-Host "Current Excel hash: $ExcelHash"
+        Write-Host "Previous Excel hash: $($State.artifacts.sourceHash)"
+
+        if (
+            $null -ne $State.artifacts.sourceHash -and
+            $ExcelHash -eq $State.artifacts.sourceHash
+        ) {
+            Write-Host ""
+            Write-Host "CCAM Excel has not changed."
+            exit 0
+        }
+
+        Write-Host ""
+        Write-Host "New CCAM Excel detected."
+
+        $WorkbookMetadata = Get-CcamWorkbookMetadata `
+            -ExcelPath $ExcelPath `
+            -WorksheetName $Config.source.versionSheet `
+            -VersionCell $Config.source.versionCell
+
+        $DetectedVersion = [string]$WorkbookMetadata.version
+        $ApplicabilityDate = [string]$WorkbookMetadata.applicabilityDate
+        $ExcelSourceUrl = [string]$Config.source.ccamExcelUrl
+
+        Write-Host "CCAM version: $DetectedVersion"
+        Write-Host "Applicable date: $ApplicabilityDate"
         Write-Host "Excel SHA-256: $ExcelHash"
     }
 
-    if ($null -eq $State.processedVersion) {
+    
         Write-Host ""
         Write-Host "No CCAM version has been processed yet."
         Write-Host "Creating workflow for $DetectedVersion"
 
         if ($null -eq $State.artifacts) {
-            $State | Add-Member -MemberType NoteProperty -Name artifacts -Value ([pscustomobject]@{})
+            $State |
+                Add-Member `
+                    -MemberType NoteProperty `
+                    -Name artifacts `
+                    -Value ([pscustomobject]@{})
+        }
+        $PreviousVersion = [string]$State.detectedVersion
+        $PreviousApplicabilityDate = [string]$State.applicabilityDate
+
+        if ([string]::IsNullOrWhiteSpace($PreviousVersion)) {
+            $PreviousVersion = "N/A"
+        }
+
+        if ([string]::IsNullOrWhiteSpace($PreviousApplicabilityDate)) {
+            $PreviousApplicabilityDate = "N/A"
         }
 
         $State.detectedVersion = $DetectedVersion
+        $State.applicabilityDate = $ApplicabilityDate
         $State.status = "DETECTED"
-        $State.detectedAt = (Get-Date).ToUniversalTime().ToString("o")
-        $State.pageHash = $CurrentHash
+        $State.detectedAt = (
+            Get-Date
+        ).ToUniversalTime().ToString("o")
+
         $State.artifacts.sourceFile = $ExcelPath
-        $State.artifacts.sourceUrl = $ExcelDownloadUrl
+        $State.artifacts.sourceUrl = $ExcelSourceUrl
         $State.artifacts.sourceHash = $ExcelHash
 
-        $State | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $StatePath -Encoding UTF8
+        $State |
+            ConvertTo-Json -Depth 20 |
+            Set-Content `
+                -LiteralPath $StatePath `
+                -Encoding UTF8
 
         Write-Host ""
         Write-Host "Workflow created."
@@ -651,54 +972,90 @@ Do not use a historical CCAM release.
         Write-Host "Version: $DetectedVersion"
 
         $State.status = "TRANSFORMING"
-        $State | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $StatePath -Encoding UTF8
 
+        $State |
+            ConvertTo-Json -Depth 20 |
+            Set-Content `
+                -LiteralPath $StatePath `
+                -Encoding UTF8
+        $WorkDirectory = Join-Path $ProjectRoot "work"
+
+if (Test-Path -LiteralPath $WorkDirectory) {
+    Write-Host ""
+    Write-Host "Cleaning transformation work directory..."
+
+    Get-ChildItem `
+        -LiteralPath $WorkDirectory `
+        -Force |
+        Remove-Item `
+            -Recurse `
+            -Force `
+            -ErrorAction Stop
+
+    Write-Host "Work directory cleaned."
+}
         $TransformResult = Invoke-CcamTransformation `
             -SourceExcelPath $ExcelPath `
             -Version $DetectedVersion
 
         if ($TransformResult.status -ne "PASS") {
             $State.status = "TRANSFORMATION_FAILED"
-            $State | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $StatePath -Encoding UTF8
+
+            $State |
+                ConvertTo-Json -Depth 20 |
+                Set-Content `
+                    -LiteralPath $StatePath `
+                    -Encoding UTF8
+
             throw "CCAM transformation failed validation."
         }
 
-$CandidateFile = [string]$TransformResult.outputPath
+        $CandidateFile = [string]$TransformResult.outputPath
 
-if ([string]::IsNullOrWhiteSpace($CandidateFile)) {
-    throw "Claude returned PASS without an outputPath."
-}
+        if ([string]::IsNullOrWhiteSpace($CandidateFile)) {
+            throw "Claude returned PASS without an outputPath."
+        }
 
-if (-not (Test-Path -LiteralPath $CandidateFile)) {
-    throw "Candidate output file does not exist: $CandidateFile"
-}
+        if (-not (Test-Path -LiteralPath $CandidateFile)) {
+            throw "Candidate output file does not exist: $CandidateFile"
+        }
 
-$ReviewReport = & $ReviewReportScriptPath `
-    -ProjectRoot $ProjectRoot `
-    -TransformResult $TransformResult `
-    -Version $DetectedVersion `
-    -CandidateFile $CandidateFile
+        $ReviewReport = & $ReviewReportScriptPath `
+            -ProjectRoot $ProjectRoot `
+            -TransformResult $TransformResult `
+            -Version $DetectedVersion `
+            -ApplicabilityDate $ApplicabilityDate `
+            -PreviousVersion $PreviousVersion `
+            -PreviousApplicabilityDate $PreviousApplicabilityDate `
+            -CandidateFile $CandidateFile
 
-if ($null -eq $ReviewReport) {
-    throw "Review report generator returned no result."
-}
+        if ($null -eq $ReviewReport) {
+            throw "Review report generator returned no result."
+        }
 
-if (-not (Test-Path -LiteralPath $ReviewReport.reportPath)) {
-    throw "Review report was not created: $($ReviewReport.reportPath)"
-}
-$State.status = "AWAITING_APPROVAL"
+        if (-not (Test-Path -LiteralPath $ReviewReport.reportPath)) {
+            throw "Review report was not created: $($ReviewReport.reportPath)"
+        }
 
-$State.artifacts.candidateFile = $CandidateFile
+        $State.status = "AWAITING_APPROVAL"
+        $State.artifacts.candidateFile = $CandidateFile
+        $State.review.reportFile = $ReviewReport.reportPath
+        $State.transformation = $TransformResult
+        $State.transformedAt = (
+            Get-Date
+        ).ToUniversalTime().ToString("o")
 
-$State.review.reportFile = $ReviewReport.reportPath
-
-$State.transformation = $TransformResult
-$State.transformedAt = (Get-Date).ToUniversalTime().ToString("o")
-
-$State |
-    ConvertTo-Json -Depth 20 |
-    Set-Content -LiteralPath $StatePath -Encoding UTF8
-
+        $State |
+            ConvertTo-Json -Depth 20 |
+            Set-Content `
+                -LiteralPath $StatePath `
+                -Encoding UTF8
+       
+        Send-CcamReviewEmail `
+            -Recipient $Config.connector.reviewer `
+            -Version $DetectedVersion `
+            -ApplicabilityDate $ApplicabilityDate `
+            -ReportPath $ReviewReport.reportPath
         Write-Host ""
         Write-Host "Transformation completed successfully."
         Write-Host "Status: AWAITING_APPROVAL"
@@ -706,17 +1063,15 @@ $State |
         Write-Host "Review report: $($ReviewReport.reportPath)"
         Write-Host "Human review items: $($ReviewReport.reviewCount)"
         Write-Host "Records: $($TransformResult.totalRecords)"
+
         exit 0
-    }
 
     Write-Host ""
-    Write-Host "Current processed version: $($State.processedVersion)"
-    Write-Host "Detected website version: $DetectedVersion"
+    Write-Host "Detected CCAM version: $DetectedVersion"
 }
 catch {
     $FailureReason = $_.Exception.Message
     $FailurePosition = $_.InvocationInfo.PositionMessage
-    $FailureDetails = $_ | Out-String
 
     Write-Host ""
     Write-Warning "CCAM automation failed: $FailureReason"
@@ -727,10 +1082,19 @@ catch {
     $TechnicalContact = $null
 
     if ($null -ne $State) {
-        if (-not [string]::IsNullOrWhiteSpace([string]$State.status)) {
+        if (
+            -not [string]::IsNullOrWhiteSpace(
+                [string]$State.status
+            )
+        ) {
             $CurrentWorkflowStatus = [string]$State.status
         }
-        if (-not [string]::IsNullOrWhiteSpace([string]$State.detectedVersion)) {
+
+        if (
+            -not [string]::IsNullOrWhiteSpace(
+                [string]$State.detectedVersion
+            )
+        ) {
             $CurrentDetectedVersion = [string]$State.detectedVersion
         }
     }
@@ -738,12 +1102,14 @@ catch {
     if (
         $null -ne $Config -and
         $null -ne $Config.connector -and
-        -not [string]::IsNullOrWhiteSpace([string]$Config.connector.technicalContact)
+        -not [string]::IsNullOrWhiteSpace(
+            [string]$Config.connector.technicalContact
+        )
     ) {
         $TechnicalContact = [string]$Config.connector.technicalContact
     }
 
-$EmailReason = @"
+    $EmailReason = @"
 $FailureReason
 
 PowerShell location:
@@ -762,4 +1128,14 @@ $FailurePosition
     }
 
     exit 1
+}
+finally {
+    Write-Host "=== CCAM END $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ==="
+
+    try {
+        Stop-Transcript
+    }
+    catch {
+        # Do not fail the CCAM workflow just because transcript cleanup failed.
+    }
 }

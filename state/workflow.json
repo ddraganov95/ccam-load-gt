@@ -1,24 +1,17 @@
 {
   "status": "TRANSFORMING",
-  "processedVersion": null,
   "detectedVersion": "V84.00",
-  "pageHash": "TEST-V84.00",
-  "detectedAt": "2026-10-30T09:46:09.1348881Z",
+  "applicabilityDate": "31/07/2026",
+  "detectedAt": "2026-11-03T10:51:34.8770386Z",
   "transformedAt": null,
-  "review": {
-    "requestedAt": null,
-    "nextReminderAt": null,
-    "reminderCount": 0,
-    "reportFile": null,
-    "reportHash": null
-  },
   "artifacts": {
-    "sourceFile": "D:\\Users\\ddraganov\\ccam-load-gt\\input\\CCAM_V84_VF.xls",
-    "sourceUrl": "LOCAL_TEST_FILE",
-    "sourceHash": "70287BB80C4F5F415F97FB14610CD9E01ADB31D562C01C8A1D4AF40CA2895172",
-    "candidateFile": null,
-    "finalFile": null
+    "sourceFile": "D:\\Users\\ddraganov\\ccam-load-gt\\input\\ccam-current.xls",
+    "sourceUrl": "https://www.ameli-ccam.fr/ccam/download/arborescence",
+    "sourceHash": "97BDC12B7A38609F929AD7098DE1B9B14B828D2EDDC77FDE25B3093167EDA4D5",
+    "candidateFile": null
   },
-  "transformation": null,
-  "lastError": null
+  "review": {
+    "reportFile": null
+  },
+  "transformation": null
 }

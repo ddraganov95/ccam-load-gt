@@ -1,12 +1,13 @@
 {
   "test": {
-    "version": "V84.00",
     "excelFile": "input/CCAM_V84_VF.xls"
   },
 
-  "source": {
-    "ccamPageUrl": "https://www.ameli.fr/accueil-de-la-ccam/telechargement/index.php"
-  },
+ "source": {
+  "ccamExcelUrl": "https://www.ameli-ccam.fr/ccam/download/arborescence",
+  "versionSheet": "CCAM",
+  "versionCell": "E1"
+},
 
   "paths": {
     "state": "state/workflow.json",
@@ -16,12 +17,15 @@
     "reviewTemplate": "Context/ccam-review-report.template.html",
 
     "inputDirectory": "input",
-    "reviewDirectory": "review",
+    "reviewDirectory": "Q:\\AIA_Product\\01_AIA_build\\Health\\05. Outils\\CCAM Load",
     "workDirectory": "work"
   },
-
+"graphTalk": {
+  "endpoint": "http://issapp014.csccha.fr:13161"
+},
   "connector": {
     "reviewer": "dragan.draganov@dxc.com",
     "technicalContact": "dragan.draganov@dxc.com"
   }
+  
 }

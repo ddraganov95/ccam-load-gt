@@ -9,7 +9,16 @@ param(
     [string]$Version,
 
     [Parameter(Mandatory)]
-    [string]$CandidateFile
+    [string]$CandidateFile,
+
+    [Parameter(Mandatory)]
+    [string]$ApplicabilityDate,
+    
+    [Parameter(Mandatory)]
+    [string]$PreviousVersion,
+
+    [Parameter(Mandatory)]
+    [string]$PreviousApplicabilityDate
 )
 
 $ErrorActionPreference = "Stop"
@@ -39,8 +48,10 @@ if (-not (Test-Path -LiteralPath $CandidateFile)) {
 $CandidateDirectory = Split-Path `
     -Parent `
     $CandidateFile
-
-if (:IsNullOrWhiteSpace($CandidateDirectory)) {
+$ConfigPath = Join-Path $ProjectRoot "config.json"
+$Config = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
+$GraphTalkEndpoint = [string]$Config.graphTalk.endpoint
+if ([string]::IsNullOrWhiteSpace($CandidateDirectory)) {
     throw "Unable to determine candidate directory from: $CandidateFile"
 }
 
@@ -53,7 +64,22 @@ $SafeVersion = $Version -replace '[^A-Za-z0-9._-]', '_'
 $ReportPath = Join-Path `
     $CandidateDirectory `
     "CCAM_${SafeVersion}_review.html"
+$LogoSourcePath = Join-Path `
+    $ProjectRoot `
+    "Context\logo.jpg"
 
+$LogoTargetPath = Join-Path `
+    $CandidateDirectory `
+    "logo.jpg"
+
+if (-not (Test-Path -LiteralPath $LogoSourcePath)) {
+    throw "DXC logo not found: $LogoSourcePath"
+}
+
+Copy-Item `
+    -LiteralPath $LogoSourcePath `
+    -Destination $LogoTargetPath `
+    -Force
 $Html = Get-Content `
     -LiteralPath $TemplatePath `
     -Raw
@@ -62,13 +88,9 @@ $GeneratedAt = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
 $RunId = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
 $CurrentFileName = [System.IO.Path]::GetFileName($CandidateFile)
 $CandidateFileUri = ([System.Uri]$CandidateFile).AbsoluteUri
-# Previous-version comparison will populate these later.
-$PreviousVersion = "N/A"
-$PreviousDate = "N/A"
-$CurrentDate = "N/A"
-$AddedCount = 0
-$RemovedCount = 0
-$ChangedCount = 0
+$CandidateFileJs = $CandidateFile.Replace('\', '\\')
+$PreviousDate = $PreviousApplicabilityDate
+$CurrentDate = $ApplicabilityDate
 
 $ReviewRows = @()
 
@@ -105,10 +127,6 @@ else {
     $EmptyReviewHtml = ""
 }
 
-$AddedRows = '<tr class="empty"><td colspan="3">Previous-version comparison not available yet.</td></tr>'
-$RemovedRows = '<tr class="empty"><td colspan="3">Previous-version comparison not available yet.</td></tr>'
-$ChangedRows = '<tr class="empty"><td colspan="5">Previous-version comparison not available yet.</td></tr>'
-
 $Values = [ordered]@{
     '{{REPORT_GENERATED_AT}}' = ConvertTo-HtmlText $GeneratedAt
     '{{RUN_ID}}' = ConvertTo-HtmlText $RunId
@@ -118,15 +136,17 @@ $Values = [ordered]@{
     '{{CURRENT_DATE}}' = ConvertTo-HtmlText $CurrentDate
     '{{CURRENT_FILE_NAME}}' = ConvertTo-HtmlText $CurrentFileName
     '{{CANDIDATE_FILE_URI}}' = ConvertTo-HtmlText $CandidateFileUri
-    '{{ADDED_COUNT}}' = [string]$AddedCount
-    '{{REMOVED_COUNT}}' = [string]$RemovedCount
-    '{{CHANGED_COUNT}}' = [string]$ChangedCount
+    '{{CANDIDATE_FILE_PATH}}' = ConvertTo-HtmlText $CandidateFileJs
+    '{{GRAPHTALK_ENDPOINT}}' = ConvertTo-HtmlText $GraphTalkEndpoint
+    '{{TOTAL_RECORDS}}' = [string]$TransformResult.totalRecords
+    '{{UNIQUE_CODES}}' = [string]$TransformResult.uniqueCodes
+    '{{MULTI_ACTIVITY_CODES}}' = [string]$TransformResult.multiActivityCodes
+    '{{PHASED_RECORDS}}' = [string]$TransformResult.phasedRecords
+    '{{POPULATED_NMBR_TOOTH}}' = [string]$TransformResult.populatedNmbrTooth
+    '{{EMPTY_TARIFF_RECORDS}}' = [string]$TransformResult.emptyTariffRecords
     '{{REVIEW_COUNT}}' = [string]$ReviewCount
     '{{REVIEW_ROWS}}' = $ReviewRowsHtml
     '{{EMPTY_REVIEW}}' = $EmptyReviewHtml
-    '{{ADDED_ROWS}}' = $AddedRows
-    '{{REMOVED_ROWS}}' = $RemovedRows
-    '{{CHANGED_ROWS}}' = $ChangedRows
 }
 
 foreach ($Token in $Values.Keys) {

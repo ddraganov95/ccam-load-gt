@@ -1,0 +1,60 @@
+**********************
+PowerShell transcript start
+Start time: 20261103125123
+Username: CSCFSG02\ddraganov
+RunAs User: CSCFSG02\ddraganov
+Configuration Name: 
+Machine: WSAMZN-CG7VVH7T (Microsoft Windows NT 10.0.26100.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -NoProfile -ExecutionPolicy Bypass -File D:\Users\ddraganov\ccam-load-gt\check-ccam.ps1
+Process ID: 1092
+PSVersion: 7.6.6
+PSEdition: Core
+GitCommitId: 7.6.6
+OS: Microsoft Windows 10.0.26100
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.4
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+Transcript started, output file is D:\Users\ddraganov\ccam-load-gt\task.log
+=== CCAM START 2026-11-03 12:51:23 ===
+CCAM Automation
+Project root: D:\Users\ddraganov\ccam-load-gt
+Working directory: D:\Users\ddraganov\ccam-load-gt
+Transformation skill found: D:\Users\ddraganov\ccam-load-gt\.claude\skills\ccam-transform\SKILL.md
+
+Configuration loaded successfully.
+CCAM Excel URL: https://www.ameli-ccam.fr/ccam/download/arborescence
+Version location: CCAM!E1
+
+Workflow state loaded successfully.
+Status: IDLE
+Detected version:
+
+Downloading current CCAM Excel...
+CCAM Excel downloaded successfully.
+Saved to: D:\Users\ddraganov\ccam-load-gt\input\ccam-current.xls
+
+Calculating Excel hash...
+Current Excel hash: 97BDC12B7A38609F929AD7098DE1B9B14B828D2EDDC77FDE25B3093167EDA4D5
+Previous Excel hash: test
+
+New CCAM Excel detected.
+CCAM version: V84.00
+Applicable date: 31/07/2026
+Excel SHA-256: 97BDC12B7A38609F929AD7098DE1B9B14B828D2EDDC77FDE25B3093167EDA4D5
+
+No CCAM version has been processed yet.
+Creating workflow for V84.00
+
+Workflow created.
+Status: DETECTED
+Version: V84.00
+
+Cleaning transformation work directory...
+Work directory cleaned.
+
+Calling Claude for CCAM transformation...
+Source: D:\Users\ddraganov\ccam-load-gt\input\ccam-current.xls
+Output: Q:\AIA_Product\01_AIA_build\Health\05. Outils\CCAM Load\V84.00\CCAM_V84.00_normalise.csv
