@@ -1,12 +1,12 @@
 **********************
 PowerShell transcript start
-Start time: 20261103132452
+Start time: 20261104174956
 Username: CSCFSG02\ddraganov
 RunAs User: CSCFSG02\ddraganov
 Configuration Name: 
 Machine: WSAMZN-CG7VVH7T (Microsoft Windows NT 10.0.26100.0)
-Host Application: C:\Program Files\PowerShell\7\pwsh.dll -NoProfile -ExecutionPolicy Bypass -File D:\Users\ddraganov\ccam-load-gt\check-ccam.ps1
-Process ID: 1072
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -NoProfile -ExecutionPolicy Bypass -File .\check-ccam.ps1
+Process ID: 11004
 PSVersion: 7.6.6
 PSEdition: Core
 GitCommitId: 7.6.6
@@ -18,7 +18,7 @@ SerializationVersion: 1.1.0.1
 WSManStackVersion: 3.0
 **********************
 Transcript started, output file is D:\Users\ddraganov\ccam-load-gt\task.log
-=== CCAM START 2026-11-03 13:24:52 ===
+=== CCAM START 2026-11-04 17:49:56 ===
 CCAM Automation
 Project root: D:\Users\ddraganov\ccam-load-gt
 Working directory: D:\Users\ddraganov\ccam-load-gt
@@ -29,8 +29,13 @@ CCAM Excel URL: https://www.ameli-ccam.fr/ccam/download/arborescence
 Version location: CCAM!E1
 
 Workflow state loaded successfully.
-Status: IDLE
-Detected version:
+Status: AWAITING_APPROVAL
+Detected version: V84.00
+
+WARNING: CCAM version V84.00 is awaiting approval.
+Candidate file: Q:\AIA_Product\01_AIA_build\Health\05. Outils\CCAM Load\V84.00\CCAM_V84.00_normalise.csv
+Review report: Q:\AIA_Product\01_AIA_build\Health\05. Outils\CCAM Load\V84.00\CCAM_V84.00_review.html
+The daily CCAM source check will continue.
 
 Downloading current CCAM Excel...
 CCAM Excel downloaded successfully.
@@ -38,281 +43,11 @@ Saved to: D:\Users\ddraganov\ccam-load-gt\input\ccam-current.xls
 
 Calculating Excel hash...
 Current Excel hash: 97BDC12B7A38609F929AD7098DE1B9B14B828D2EDDC77FDE25B3093167EDA4D5
-Previous Excel hash: test
+Previous Excel hash: 97BDC12B7A38609F929AD7098DE1B9B14B828D2EDDC77FDE25B3093167EDA4D5
 
-New CCAM Excel detected.
-CCAM version: V84.00
-Applicable date: 31/07/2026
-Excel SHA-256: 97BDC12B7A38609F929AD7098DE1B9B14B828D2EDDC77FDE25B3093167EDA4D5
-
-No CCAM version has been processed yet.
-Creating workflow for V84.00
-
-Workflow created.
-Status: DETECTED
-Version: V84.00
-
-Cleaning transformation work directory...
-Work directory cleaned.
-
-Calling Claude for CCAM transformation...
-Source: D:\Users\ddraganov\ccam-load-gt\input\ccam-current.xls
-Output: Q:\AIA_Product\01_AIA_build\Health\05. Outils\CCAM Load\V84.00\CCAM_V84.00_normalise.csv
-
-Claude structured result:
-{
-  "status": "PASS",
-  "outputPath": "Q:\\AIA_Product\\01_AIA_build\\Health\\05. Outils\\CCAM Load\\V84.00\\CCAM_V84.00_normalise.csv",
-  "totalRecords": 13443,
-  "uniqueCodes": 8261,
-  "multiActivityCodes": 4942,
-  "phasedRecords": 58,
-  "populatedNmbrTooth": 201,
-  "emptyTariffRecords": 944,
-  "validationChecks": [
-    {
-      "name": "Encoding: Windows-1252 sans BOM",
-      "status": "PASS",
-      "details": "Fichier réécrit en CP1252 sans BOM ; relu depuis le disque ; iconv CP1252→UTF-8 réussit ; aucun caractère non représentable."
-    },
-    {
-      "name": "Fins de ligne CRLF uniquement",
-      "status": "PASS",
-      "details": "13443 CRLF ; 0 LF isolé ; 0 CR isolé ; fichier terminé par CRLF."
-    },
-    {
-      "name": "Structure : neuf champs par enregistrement",
-      "status": "PASS",
-      "details": "13443 lignes, toutes à exactement 9 champs séparés par ';'."
-    },
-    {
-      "name": "Champs obligatoires renseignés",
-      "status": "PASS",
-      "details": "Code, Actvty, Phase, Label, Date, Group_code non vides pour toutes les lignes (0 vide)."
-    },
-    {
-      "name": "Format des codes",
-      "status": "PASS",
-      "details": "Tous les codes respectent le motif AAAA999 ; 8261 codes distincts."
-    },
-    {
-      "name": "Date d'applicabilité unique",
-      "status": "PASS",
-      "details": "Une seule date trouvée dans l'en-tête (E1 : « CNAM - CCAM version 84 applicable 31/07/2026 ») ; 31/07/2026 utilisée partout."
-    },
-    {
-      "name": "Unicité de (Code, Activité, Phase)",
-      "status": "PASS",
-      "details": "13443 combinaisons distinctes, 0 doublon."
-    },
-    {
-      "name": "Libellés : espaces et sauts de ligne",
-      "status": "PASS",
-      "details": "0 libellé avec espace initial/final, espace double ou saut de ligne résiduel."
-    },
-    {
-      "name": "Libellés : pas de tiret avant Phase N / Activité N",
-      "status": "PASS",
-      "details": "0 occurrence de ' - Phase N :' ou ' - Activité N :'."
-    },
-    {
-      "name": "Libellés : suffixes anesthésie et CEC",
-      "status": "PASS",
-      "details": "Suffixe ' - anesthésie' uniquement sur Activité 4 (4938 enregistrements) ; ' - circulation extracorporelle [CEC]' uniquement sur Activité 5 (177)."
-    },
-    {
-      "name": "Cohérence des numéros dans les libellés",
-      "status": "PASS",
-      "details": "Chaque 'Activité N :' correspond à l'Activité de l'enregistrement ; chaque 'Phase N :' correspond à la Phase de l'enregistrement ; 0 écart."
-    },
-    {
-      "name": "Enregistrements phasés",
-      "status": "PASS",
-      "details": "58 enregistrements à phase > 0, chacun avec 'Phase N :' dans le libellé ; aucun code phasé n'a d'enregistrement d'anesthésie en phase 0."
-    },
-    {
-      "name": "Blocs de codes et Code hérité",
-      "status": "PASS",
-      "details": "8261 blocs logiques ouverts par un CodeValue du motif acte ; chaque code possède un enregistrement Activité 1 ; aucun Code hérité d'un bloc précédent."
-    },
-    {
-      "name": "Tarifs",
-      "status": "PASS",
-      "details": "Format décimal à virgule, aucun zéro de fin ajouté, pas d'arrondi ; 'Non pris en charge' et cellules vides rendus vides ; 944 enregistrements avec tarifs vides (toujours les deux à la fois) ; aucun tarif littéral 0."
-    },
-    {
-      "name": "Nmbr_tooth : valeurs et portée",
-      "status": "PASS",
-      "details": "201 valeurs entières ≥ 2, uniquement sur l'enregistrement principal (Activité 1, phase 0) ; aucune valeur sur anesthésie, activités secondaires, CEC ou phases."
-    },
-    {
-      "name": "Fin de ligne selon Nmbr_tooth",
-      "status": "PASS",
-      "details": "13242 lignes vides finissant par ';' ; 201 lignes peuplées finissant par le nombre sans ';' supplémentaire."
-    },
-    {
-      "name": "Délimiteur dans les libellés",
-      "status": "PASS",
-      "details": "Après sérialisation, 9 champs partout. Un seul libellé source contenait des ';' (YYYY010) : remplacés par '.'."
-    },
-    {
-      "name": "Absence de fuite et d'empilement de libellés",
-      "status": "PASS",
-      "details": "Libellés construits uniquement à partir du texte de l'acte courant ; aucune description d'activité ou de phase d'un autre acte ; aucun libellé tronqué."
-    },
-    {
-      "name": "Activités sans enregistrement principal",
-      "status": "PASS",
-      "details": "0 code sans enregistrement Activité 1."
-    },
-    {
-      "name": "Comparaison avec la sortie de référence (ancienne, normalisée)",
-      "status": "PASS",
-      "details": "13443/13443 enregistrements identiques sur les neuf champs après normalisation (espaces, tirets Phase/Activité, fins de ligne). Référence utilisée uniquement comme contrôle, non comme source."
-    },
-    {
-      "name": "Exhaustivité de la lecture source",
-      "status": "PASS",
-      "details": "Feuille CCAM lue intégralement (30797 lignes, A1:Q30797, lecture seule) ; 0 ligne d'activité orpheline hors bloc de code."
-    }
-  ],
-  "humanReviewItems": [],
-  "deterministicDecisions": [
-    {
-      "code": "ALL",
-      "category": "block-reconstruction",
-      "decision": "8261 blocs logiques ouverts par chaque CodeValue du motif acte (4 lettres + 3 chiffres). Chaque enregistrement reprend le Code du bloc qui l'contient ; 13443 enregistrements générés, un par ligne d'activité."
-    },
-    {
-      "code": "Lignes de section et modificateurs (ex. 19.03, lignes ~30724-30794)",
-      "category": "exclusion",
-      "decision": "Numéros de section, titres de chapitre et codes modificateurs (O, U, P, S, F, M, A, E, G, N, 9, D, Y, Z, B, H, Q, V, W, R, L, J, K, T, 3, 4, 5, 6, 7, 8) ferment le bloc courant et ne génèrent aucun enregistrement. Ce ne sont pas des actes CCAM ; l'ancienne sortie n'en contient pas non plus."
-    },
-    {
-      "code": "Listes entre crochets dans la colonne Code (ex. [A, J, K, T, 3])",
-      "category": "exclusion",
-      "decision": "Ce ne sont pas des CodeValue : elles n'ouvrent ni ne ferment de bloc."
-    },
-    {
-      "code": "HCGA223 (lignes 13459-13460), LBGA052 (lignes 21032-21033)",
-      "category": "displaced-text",
-      "decision": "La ligne Activité 4 porte une note (Environnement / Facturation) dans Texte, et le texte 'anesthésie' figure sur la ligne physique suivante du même bloc. Associé à l'Activité 4 : libellé '<principal> - anesthésie'. Règle de texte déplacé appliquée, sans revue humaine."
-    },
-    {
-      "code": "EQLA665",
-      "category": "multiline-label",
-      "decision": "Première ligne retenue comme libellé principal ; lignes 'Indication : …' et 'Son utilisation est limitée …' exclues (indication et condition de facturation)."
-    },
-    {
-      "code": "HBLD318",
-      "category": "multiline-label",
-      "decision": "'Avec ou sans recouvrement céramique' conservé (qualification directe du nom de l'acte), joint par une espace : 'Pose d'une couronne dentaire dentoportée en alliage précieux Avec ou sans recouvrement céramique'."
-    },
-    {
-      "code": "HHFC040",
-      "category": "multiline-label",
-      "decision": "Saut de ligne interne joint par une espace : '… sans rétablissement de la continuité, par cœlioscopie'."
-    },
-    {
-      "code": "EQGA214, HBGD358, HBGD402, HBGD171, HBLD030",
-      "category": "multiline-label",
-      "decision": "Ligne vide finale supprimée ; libellé inchangé."
-    },
-    {
-      "code": "Cellules enfants multilignes (ex. ligne 15449, ligne 24017, ligne 24026)",
-      "category": "multiline-child",
-      "decision": "Seule la première ligne de la description d'activité ou de phase est retenue ; les lignes suivantes 'Avec ou sans : …' sont des conditions, exclues."
-    },
-    {
-      "code": "Libellés d'anesthésie (4938 enregistrements)",
-      "category": "label-construction",
-      "decision": "Phase 0 : '<principal> - anesthésie'. Phase N : '<principal> Phase N : <description> - anesthésie' (20 enregistrements). Jamais de numéro d'activité ni de description d'activité dans un libellé d'anesthésie."
-    },
-    {
-      "code": "31 codes avec Activité 2 ou 3 et anesthésie",
-      "category": "anesthesia-ownership",
-      "decision": "Séquence Activité 1 / 2 puis anesthésie dans la même phase : une seule anesthésie GLOBALE, libellé '<principal> - anesthésie', sans numéro d'activité. Aucun doublon (Code, Activité, Phase) n'est apparu. Décision déterministe, non soumise à revue."
-    },
-    {
-      "code": "Activité 5 CEC (177 enregistrements)",
-      "category": "label-construction",
-      "decision": "Libellé '<principal> - circulation extracorporelle [CEC]' ; tarifs et regroupement pris sur la ligne CEC."
-    },
-    {
-      "code": "Tarifs (944 enregistrements à tarifs vides)",
-      "category": "tariff",
-      "decision": "Tarifs numériques écrits avec virgule décimale, sans arrondi ni zéro ajouté. 'Non pris en charge' et cellules vides → champ vide. Aucun enregistrement n'a un seul tarif vide."
-    },
-    {
-      "code": "Group_code",
-      "category": "group",
-      "decision": "Regroupement lu sur la ligne même de chaque enregistrement (les lignes d'anesthésie portent leur propre regroupement, p. ex. ADA). Aucun Group_code vide."
-    },
-    {
-      "code": "YYYY010",
-      "category": "delimiter",
-      "decision": "Points-virgules présents dans le libellé principal remplacés par des points ; libellé non tronqué."
-    }
-  ],
-  "nmbrToothDecisions": [
-    {
-      "rule": "Renseigné uniquement sur l'enregistrement principal ordinaire (Activité 1, phase 0). Anesthésie (Activité 4), autres activités (2, 3, 5 dont CEC) et enregistrements de phase restent vides.",
-      "result": "201 valeurs renseignées ; aucune sur Activité 4, CEC ou phase."
-    },
-    {
-      "rule": "Quantité exacte N ≥ 2 de dents, racines, incisives, canines, prémolaires, molaires ou odontoïdes/dents surnuméraires dans Avulsion / Ablation / Exérèse / Réimplantation de N ... → N.",
-      "result": "96 valeurs (82 dents, dont 'Avulsion de 2 odontoïdes … ou de 2 dents surnuméraires' ; 14 racines ou séparations de racines). Ex. 'Avulsion de 29 dents permanentes sur arcade sans alvéolectomie' → 29."
-    },
-    {
-      "rule": "Implants intrabuccaux : Pose / Ablation / Dégagement et activation de N implants ; Pose d'infrastructure coronaire sur N implants ; Pose de moyen de liaison sur N implants préprothétiques intraosseux intrabuccaux → N. La forme 'N ou plus' prend N comme borne inférieure car la famille numérotée est établie par les frères exacts.",
-      "result": "55 valeurs d'implants, dont 6 formes 'ou plus' (ex. 'Pose de 11 implants intraosseux intrabuccaux ou plus' → 11)."
-    },
-    {
-      "rule": "Prothèse 'comportant N dents' → N ; 'Comblement … sur N dents' → N ; Supplément 'pose de N dents contreplaquées (ou massives)' → N.",
-      "result": "25 prothèses, 7 comblements, 18 suppléments."
-    },
-    {
-      "rule": "Plage fermée 'N à M' ou 'de N à M dents' → vide ; 'moins de N dents' → vide.",
-      "result": "Ex. 'Avulsion de 17 dents à 19 dents permanentes …' → vide."
-    },
-    {
-      "rule": "Quantité 1 (singulier) → vide.",
-      "result": "Aucune valeur 1 renseignée."
-    },
-    {
-      "rule": "Supplément pour avulsion de N troisièmes molaires (quantité de l'acte référencé) → vide.",
-      "result": "YYYY755 → vide."
-    },
-    {
-      "rule": "Barre de conjonction entre N implants → vide.",
-      "result": "Vide dans tous les cas."
-    },
-    {
-      "rule": "Objets non dénombrés : faces, angles, arcades, facettes, éléments, piliers, ancrages, anastomoses, secteurs ; 'secteur de N dents ou plus' sans famille numérotée exacte → vide.",
-      "result": "Vide. Ex. 'Gingivectomie sur un secteur de N dents ou plus' → vide."
-    }
-  ],
-  "notes": [
-    "Le classeur source contient une feuille unique 'CCAM' (30 797 lignes). Lu en lecture seule via Excel COM ; le fichier source n'a pas été modifié.",
-    "Le fichier final est identique, enregistrement par enregistrement et sur les neuf champs après normalisation, à l'ancienne sortie de référence (git 1c1c92f, Context/CCAM_V84_GraphTalk_1.disabled.txt). Cette référence a servi de contrôle, pas de source ; aucun défaut de l'ancienne sortie (fuite de libellé, empilement, troncature, nombre de champs) n'a été reproduit.",
-    "Libellé source 'Avulsion de19 dents temporaires sur arcade' (HBGD282, ligne 12371) : espace manquante dans le texte source. Conservé tel quel ; Nmbr_tooth = 19 par la règle.",
-    "Les lignes de modificateurs (O, U, P… et autres codes à un caractère) ne génèrent aucun enregistrement, comme dans l'ancienne sortie.",
-    "Fichiers intermédiaires dans D:\\Users\\ddraganov\\ccam-load-gt\\work\\build : ccam-build.ps1, nmbr.ps1, finalize-and-validate.ps1, cand2.csv (UTF-8), log2.tsv, validation.json. Le dossier Q: contient toujours claude-error.txt (préexistant, vide), non modifié.",
-    "État du workflow (state/workflow.json) non modifié ; aucune notification envoyée."
-  ],
-  "blockingErrors": []
-}
-
-Review notification submitted to Outlook for dragan.draganov@dxc.com
-
-Transformation completed successfully.
-Status: AWAITING_APPROVAL
-Candidate file: Q:\AIA_Product\01_AIA_build\Health\05. Outils\CCAM Load\V84.00\CCAM_V84.00_normalise.csv
-Review report: Q:\AIA_Product\01_AIA_build\Health\05. Outils\CCAM Load\V84.00\CCAM_V84.00_review.html
-Human review items: 0
-Records: 13443
-=== CCAM END 2026-11-03 13:36:32 ===
+CCAM Excel has not changed.
+=== CCAM END 2026-11-04 17:49:57 ===
 **********************
 PowerShell transcript end
-End time: 20261103133632
+End time: 20261104174957
 **********************
