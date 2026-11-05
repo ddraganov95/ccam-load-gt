@@ -346,6 +346,13 @@ Run Validation Mode after setup to verify that an email can be sent successfully
 ```powershell
 ./check-ccam.ps1 -Validate
 ```
+### Microsoft Excel
+
+Microsoft Excel must be installed on the Windows machine running the automation.
+
+The workflow uses **Excel COM (Component Object Model)** to interact with the CCAM `.xls` workbook programmatically. PowerShell uses Excel COM to open the workbook and extract CCAM metadata, while the transformation workflow also requires access to Excel when processing the source workbook.
+
+Excel must therefore be installed and accessible to the Windows user running the automation.
 
 ### Windows Task Scheduler
 
@@ -634,6 +641,7 @@ This keeps the automation focused on preparing the CCAM candidate while leaving 
 - Final load success must be verified in GraphTalk.
 - Outlook COM requires Outlook to be configured for the execution user.
 - Scheduled Outlook notifications currently require that user to be logged on.
+- Microsoft Excel must be installed and logged into on the execution machine because the workflow relies on Excel COM automation to interact with the CCAM workbook.
 - Claude Code must be installed/configured on the execution machine.
 - The VBS launcher currently contains machine-specific paths.
 - The unattended Claude Code transformation currently uses `--dangerously-skip-permissions` to allow file generation, validation scripts, and artifact creation without interactive approval prompts. Claude still runs with the permissions of the Windows account executing the scheduled task.

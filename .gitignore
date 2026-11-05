@@ -2,3 +2,5 @@
 /output/
 /work/
 config.json
+/state/workflow.json
+task.log

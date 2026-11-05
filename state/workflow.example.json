@@ -1,0 +1,17 @@
+{
+  "status": "IDLE",
+  "detectedVersion": null,
+  "applicabilityDate": null,
+  "detectedAt": null,
+  "transformedAt": null,
+  "artifacts": {
+    "sourceFile": null,
+    "sourceUrl": null,
+    "sourceHash": null,
+    "candidateFile": null
+  },
+  "review": {
+    "reportFile": null
+  },
+  "transformation": null
+}
