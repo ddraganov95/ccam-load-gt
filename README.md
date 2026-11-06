@@ -637,6 +637,9 @@ This keeps the automation focused on preparing the CCAM candidate while leaving 
 
 ## Current Status / Limitations
 
+- Output csv must be created at a folder where the GT server we send request to can read from.
+For that reason we have the script runing on a machine that has acess to the same shared file storage as the GT server.
+
 - GraphTalk submission from the HTML cannot confirm the SOAP transaction result because of no-cors.
 - Final load success must be verified in GraphTalk.
 - Outlook COM requires Outlook to be configured for the execution user.
